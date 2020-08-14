@@ -1,7 +1,7 @@
 # Dylink Macro
 ## Description
 This is an attribute macro that expands to dynamically linked code. All functions
-declared are expanded into thunks. Vulkan and Opengl have specializations at the time of expansion.
+declared are expanded into thunks. Vulkan and Opengl have specializations at the time of expansion. This crate does **not** work on its own, because it needs a reverse dependency for its definitions.
 ## Crate Dependencies
 The following is the minimum dependency required for macro expansion:
 * `once_cell = "1.4.0"`

@@ -4,6 +4,11 @@ version = "0.1.0"
 authors = ["Jonathan Thomason"]
 edition = "2018"
 publish = false
+readme = "readme.md"
+repository = "https://github.com/Razordor/dylink_macro"
+license-file = "LICENSE"
+keywords = ["ffi", "macro", "attribute"]
+description = "Dynamic function loading macro."
 
 [lib]
 proc-macro=true
