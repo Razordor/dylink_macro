@@ -1,3 +1,4 @@
+// Copyright (c) 2020 Jonathan
 use proc_macro::{TokenStream, TokenTree, Ident, Span};
 
 macro_rules! tk_error_msg {
