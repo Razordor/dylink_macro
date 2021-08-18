@@ -1,13 +1,12 @@
 [package]
 name = "dylink_macro"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Jonathan Thomason"]
 edition = "2018"
 readme = "readme.md"
-repository = "https://github.com/Razordor/dylink_macro"
-license-file = "LICENSE"
+license = "MIT"
 keywords = ["ffi", "macro", "attribute"]
-description = "Dynamic function loading macro."
+description = "Dynamic function loading attribute."
 
 [lib]
 proc-macro=true
