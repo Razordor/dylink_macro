@@ -180,9 +180,6 @@ pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
                                     ))
                                     .as_str(),
                                 );
-                            //init_function_block.push_str("dylink::glloader(\"");
-                            //init_function_block.push_str(&function_name.to_string());
-                            //init_function_block.push_str("\"))});");
                             } else {
                                 init_function_block.push_str("dylink::loader(");
                                 init_function_block.push_str(&li.to_string()); // library name
