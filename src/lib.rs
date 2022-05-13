@@ -148,7 +148,7 @@ pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
                             if li == "\"vulkan-1\"" {
                                 init_function_block.push_str("dylink::vkloader(\"");
                                 init_function_block.push_str(&function_name.to_string());
-                                if let Option::Some(TokenTree::Punct(punct)) =
+                                /*if let Option::Some(TokenTree::Punct(punct)) =
                                     &(attr.clone().into_iter()).nth(3)
                                 {
                                     if punct.to_string() != "," {
@@ -171,7 +171,8 @@ pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
                                     }
                                 } else {
                                     init_function_block.push_str("\", dylink::Context::new()))});");
-                                }
+                                }*/
+                                init_function_block.push_str("\"))});");
                             } else if li == "\"opengl32\"" {
                                 init_function_block.push_str(
                                     format(format_args!(
