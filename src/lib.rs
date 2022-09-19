@@ -1,6 +1,6 @@
-// Copyright (c) 2020 Jonathan "Razordor" Alan Thomason
-
-use proc_macro::{Ident, Span, TokenStream, TokenTree};
+// Copyright (c) 2022 Jonathan "Razordor" Alan Thomason
+#![feature(proc_macro_quote)]
+use proc_macro::*;
 use std::fmt::format;
 
 macro_rules! tk_error_msg {
@@ -77,32 +77,9 @@ macro_rules! tk_assert_eq {
     };
 }
 
-macro_rules! tk_parse {
-    ($lexemes:literal) => {
-        $lexemes.parse::<TokenStream>().unwrap()
-    };
-    ($stream:ident [$index:literal]) => {
-        TokenStream::from($stream.clone().into_iter().clone().nth($index).unwrap())
-    };
-    ($token:ident) => {
-        TokenStream::from($token.clone())
-    };
-}
-
-macro_rules! expand_ident {
-    ($token:ident) => {
-        if let TokenTree::Ident(id) = $token.clone() {
-            id
-        } else {
-            panic!()
-        }
-    };
-}
-
 #[derive(Clone, Copy)]
 enum Consume {
     Visibility,
-    Skip,
     Prefix,
     Param,
 }
@@ -112,118 +89,93 @@ pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
     tk_assert_eq!(attr[0], Ident("name"));
     tk_assert_eq!(attr[1], Punct('='));
     tk_assert_eq!(attr[2], Literal(_));
-
-    let mut item_ret = TokenStream::new();
-    if let TokenTree::Group(group) = item.clone().into_iter().nth(2).expect("p-0") {
-        let mut use_after_skip = Consume::Skip;
-        let mut function_name: Ident = Ident::new("uninitialized", Span::call_site());
-        let mut begin_declaration = true;
-        let mut command = Consume::Visibility;
+    let mut item_iter = item.into_iter();
+    let lib_name = attr.into_iter().nth(2).unwrap();
+    let call_conv = TokenStream::from(item_iter.clone().nth(1).unwrap());
+    if let TokenTree::Group(group) = item_iter.nth(2).expect("p-0") {
+        let mut item_ret = TokenStream::new();
+        let mut function_name = TokenStream::new();        
         let mut param_list = TokenStream::new();
-        for token in group.stream().clone() {
-            if begin_declaration {
-                item_ret.extend(tk_parse!("#[allow(non_upper_case_globals)]"));
-                begin_declaration = false;
-            }
+        let mut vis = TokenStream::new();
+        let mut command = Consume::Visibility;
+        for token in group.stream() {
             match &token {
                 TokenTree::Ident(identifier) => {
                     if "fn" == identifier.clone().to_string() {
-                        command = Consume::Skip;
-                        use_after_skip = Consume::Prefix;
+                        command = Consume::Prefix;
+                        continue;
                     }
                 }
                 TokenTree::Punct(punct) => {
-                    if ';' == punct.clone().as_char() {
-                        item_ret.extend(tk_parse!("> ="));
-
+                    // if semicolon, then finish off parsing
+                    if ';' == punct.as_char() {
                         // BEGIN BODY
                         let mut init_function_block =
-                            "dylink::Lazy::new(|| unsafe {std::mem::transmute(".to_string();
-                        if let TokenTree::Literal(li) = &(attr.clone().into_iter())
-                            .nth(2)
-                            .expect("attribute: range error (diagnostic not implemented)")
-                        {
+                            "".to_string();
+                        if let TokenTree::Literal(ref li) = lib_name {
                             let mut li = li.to_string();
                             li.make_ascii_lowercase();
-                            if li == "\"vulkan-1\"" {
-                                init_function_block.push_str("dylink::vkloader(\"");
-                                init_function_block.push_str(&function_name.to_string());
-                                /*if let Option::Some(TokenTree::Punct(punct)) =
-                                    &(attr.clone().into_iter()).nth(3)
-                                {
-                                    if punct.to_string() != "," {
-                                        let mut error = String::from("compile_error!(\"punctuation error: expected `,`, but found `");
-                                        error.push_str(&punct.to_string());
-                                        error.push_str("`.\");");
-                                        return error.parse().unwrap();
-                                    } else {
-                                        tk_assert_eq!(attr[4], Ident("context"));
-                                        tk_assert_eq!(attr[5], Punct('='));
-                                        init_function_block.push_str("\",");
-                                        let mut index = 6;
-                                        while let Option::Some(token) =
-                                            &(attr.clone().into_iter()).nth(index)
-                                        {
-                                            init_function_block.push_str(&token.to_string());
-                                            index += 1;
-                                        }
-                                        init_function_block.push_str("))});");
-                                    }
-                                } else {
-                                    init_function_block.push_str("\", dylink::Context::new()))});");
-                                }*/
-                                init_function_block.push_str("\"))});");
-                            } else if li == "\"opengl32\"" {
-                                init_function_block.push_str(
-                                    format(format_args!(
-                                        "dylink::glloader(\"{}{}",
-                                        function_name, "\"))});"
-                                    ))
-                                    .as_str(),
-                                );
-                            } else {
-                                init_function_block.push_str("dylink::loader(");
-                                init_function_block.push_str(&li.to_string()); // library name
-                                init_function_block.pop(); // remove '\"' from the end
-                                init_function_block.push_str(".dll\",\"");
-                                init_function_block.push_str(&function_name.to_string()); // function name
-                                init_function_block.push_str("\"))});");
+                            match li.as_str() {
+                                "\"vulkan-1\"" => {
+                                    init_function_block.push_str("dylink::vkloader(\"");
+                                    init_function_block.push_str(&function_name.to_string());
+                                }
+                                "\"opengl32\"" => {
+                                    init_function_block.push_str(
+                                        format(format_args!(
+                                            "dylink::glloader(\"{}",
+                                            function_name
+                                        ))
+                                        .as_str(),
+                                    );
+                                }
+                                other => {
+                                    init_function_block.push_str("dylink::loader(");
+                                    init_function_block.push_str(other); // library name
+                                    init_function_block.pop(); // remove '\"' from the end
+                                    init_function_block.push_str(".dll\",\"");
+                                    init_function_block.push_str(&function_name.to_string());
+                                    // function name
+                                }
                             }
                         }
+                        init_function_block.push_str("\")");
                         // END BODY
 
                         // PARSE BODY
-                        item_ret.extend(init_function_block.parse::<TokenStream>().unwrap());
+                        let body = init_function_block.parse::<TokenStream>().unwrap();
 
+                        item_ret.extend(quote!{
+                            #[allow(non_upper_case_globals)]
+                            $vis static $function_name: dylink::Lazy<unsafe extern $call_conv fn $param_list> 
+                            = dylink::Lazy::new(|| unsafe {
+                                std::mem::transmute($body)
+                            });
+                        });
+
+                        // CLEAN UP
+                        function_name = TokenStream::new();
                         param_list = TokenStream::new();
-                        command = Consume::Skip;
-                        use_after_skip = Consume::Visibility;
-                        begin_declaration = true;
+                        vis = TokenStream::new();
+                        command = Consume::Visibility;
+                        continue;
                     }
                 }
                 _ => {}
             }
             match command {
-                Consume::Visibility => item_ret.extend(tk_parse!(token)),
+                Consume::Visibility => vis.extend(quote!($token)),
                 Consume::Prefix => {
-                    function_name = expand_ident!(token);
-                    item_ret.extend(tk_parse!("static"));
-                    item_ret.extend(tk_parse!(token));
-                    item_ret.extend(tk_parse!(": dylink::Lazy<unsafe extern"));
-                    item_ret.extend(tk_parse!(item[1]));
-                    item_ret.extend(tk_parse!("fn"));
+                    function_name.extend(quote!($token));
                     command = Consume::Param;
                 }
-                Consume::Param => {
-                    item_ret.extend(tk_parse!(token));
-                    param_list.extend(tk_parse!(token));
-                }
-                Consume::Skip => command = use_after_skip,
+                Consume::Param => param_list.extend(quote!($token)),
             }
         }
+        item_ret
     } else {
-        return tk_parse!("compile_error!(\"expected group\");");
+        "compile_error!(\"expected group\");"
+            .parse::<TokenStream>()
+            .unwrap()
     }
-    //panic!("{}",item_ret.clone().to_string());
-    item_ret
 }
