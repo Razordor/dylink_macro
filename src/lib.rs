@@ -190,9 +190,9 @@ pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
                                             }
                                         }
                                     }
-                                    TokenTree::Punct(ref punct) => {
+                                    TokenTree::Punct(punct) => {
                                         let punct_char = punct.as_char();
-                                        if punct_char == '-' && punct.spacing() == Spacing::Joint {
+                                        if punct_char == '-' {
                                             last_dash = true;
                                         } else if punct_char == '>' && last_dash {
                                             last_dash = false;
@@ -203,8 +203,6 @@ pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
                                 }
                             }
                         }
-
-                        //assert!(has_ret, "function missing return type: {function_name}");
 
                         let mut params_no_type = TokenStream::new();
                         let mut params_with_type = TokenStream::new();
@@ -228,12 +226,10 @@ pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
 
                         item_ret.extend(quote!{
                             #[doc(hidden)]
-                            #[inline]
+                            #[inline(never)]
                             pub unsafe extern $call_conv fn $initial_fn($params_with_type) $ret_type {
                                 static START: std::sync::Once = std::sync::Once::new();
-                                START.call_once(||{
-                                    *std::cell::UnsafeCell::raw_get(&$function_name.0) = std::mem::transmute($body);
-                                });
+                                $function_name.update(&START, ||std::mem::transmute($body));
                                 $function_name($params_no_type)
                             }
                             #[allow(non_upper_case_globals)]
@@ -241,7 +237,6 @@ pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
                             : dylink::LazyFn<unsafe extern $call_conv fn $signature>
                             = dylink::LazyFn::new($initial_fn);
                         });
-                        //panic!("{item_ret}");
 
                         // CLEAN UP
                         function_name = TokenStream::new();
