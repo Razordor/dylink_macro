@@ -2,6 +2,7 @@
 #![feature(proc_macro_quote)]
 use proc_macro::*;
 use std::fmt::format;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 macro_rules! tk_error_msg {
     ($name:literal, &$expected:ident, &$found:ident) => {
@@ -109,7 +110,7 @@ pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
                 TokenTree::Punct(punct) => {
                     // if semicolon, then finish off parsing
                     if ';' == punct.as_char() {
-                        // BEGIN BODY
+                        // BEGIN SELECT LINKER TYPE
                         let mut init_function_block = "dylink::".to_string();
                         if let TokenTree::Literal(ref li) = lib_name {
                             let mut li = li.to_string();
@@ -117,26 +118,27 @@ pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
                             match li.as_str() {
                                 "\"vulkan-1\"" => {
                                     init_function_block
-                                        .push_str(&format!("vkloader(\"{function_name}"));
+                                        .push_str(&format!("vkloader(\"{function_name}\")"));
                                 }
                                 "\"opengl32\"" => {
                                     init_function_block
-                                        .push_str(&format!("glloader(\"{function_name}"));
+                                        .push_str(&format!("glloader(\"{function_name}\")"));
                                 }
                                 dll_name => {
                                     init_function_block.push_str(&format!("loader({dll_name}"));
                                     init_function_block.pop(); // remove '\"' from the end
                                     init_function_block
-                                        .push_str(&format!(".dll\",\"{function_name}"));
+                                        .push_str(&format!(".dll\",\"{function_name}\")"));
                                     // function name
                                 }
                             }
+                        } else {
+                            panic!();
                         }
-                        init_function_block.push_str("\")");
-                        // END BODY
+                        // END SELECT LINKER TYPE
 
-                        // PARSE BODY
-                        let body = init_function_block.parse::<TokenStream>().unwrap();
+                        // PARSE LINKER TYPE
+                        let call_linker = init_function_block.parse::<TokenStream>().unwrap();
 
                         let mut last_dash = false;
                         let mut ret_type = TokenStream::new();
@@ -208,7 +210,7 @@ pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
                             params_with_type.extend(quote!($param_name : $data_type,))
                         }
 
-                        use std::sync::atomic::{AtomicU64, Ordering};
+                        
                         static MOD_COUNT: AtomicU64 = AtomicU64::new(0);
 
                         let initial_fn = format!(
@@ -228,7 +230,7 @@ pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
                             #[inline(never)]
                             pub unsafe extern $call_conv fn $initial_fn($params_with_type) $ret_type {
                                 static START: std::sync::Once = std::sync::Once::new();
-                                $function_name.update(&START, ||std::mem::transmute($body.expect($error_msg)));
+                                $function_name.update(&START, ||std::mem::transmute($call_linker.expect($error_msg)));
                                 $function_name($params_no_type)
                             }
                             #[allow(non_upper_case_globals)]
