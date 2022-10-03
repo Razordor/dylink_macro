@@ -144,14 +144,13 @@ pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
                         // PARSE BODY
                         let body = init_function_block.parse::<TokenStream>().unwrap();
 
-                                          
                         let mut last_dash = false;
                         let mut ret_type = TokenStream::new();
                         let mut param_types = Vec::<TokenStream>::new();
                         for meta in signature.clone().into_iter() {
                             if !ret_type.is_empty() {
                                 ret_type.extend(quote!($meta));
-                            } else {                                
+                            } else {
                                 match meta {
                                     TokenTree::Group(group) => {
                                         let mut last_ident = false;
@@ -168,12 +167,15 @@ pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
                                                             last_comma = true;
                                                             next_param_type = false;
                                                         }
-                                                        ':' => if last_comma && last_ident {
-                                                            last_ident = false;
-                                                            last_comma = false;
-                                                            next_param_type = true;
-                                                            param_types.push(TokenStream::new());
-                                                            continue;
+                                                        ':' => {
+                                                            if last_comma && last_ident {
+                                                                last_ident = false;
+                                                                last_comma = false;
+                                                                next_param_type = true;
+                                                                param_types
+                                                                    .push(TokenStream::new());
+                                                                continue;
+                                                            }
                                                         }
                                                         _ => (),
                                                     }
@@ -181,7 +183,10 @@ pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
                                                 _ => last_ident = false,
                                             }
                                             if next_param_type {
-                                                param_types.last_mut().unwrap().extend(quote!($arg));
+                                                param_types
+                                                    .last_mut()
+                                                    .unwrap()
+                                                    .extend(quote!($arg));
                                             }
                                         }
                                     }
@@ -200,7 +205,7 @@ pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
                         }
 
                         //assert!(has_ret, "function missing return type: {function_name}");
-                        
+
                         let mut params_no_type = TokenStream::new();
                         let mut params_with_type = TokenStream::new();
                         let param_count = param_types.len();
@@ -216,11 +221,12 @@ pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
                         static MOD_COUNT: AtomicU64 = AtomicU64::new(0);
                         let mod_count = MOD_COUNT.load(Ordering::Acquire);
                         MOD_COUNT.store(mod_count + 1, Ordering::Release);
-                        
-                        let initial_fn: String = "__dylink_initializer".to_string() + &mod_count.to_string();
+
+                        let initial_fn: String =
+                            "__dylink_initializer".to_string() + &mod_count.to_string();
                         let initial_fn = initial_fn.parse::<TokenStream>().unwrap();
-                        
-                        item_ret.extend(quote!{             
+
+                        item_ret.extend(quote!{
                             #[doc(hidden)]
                             #[inline]
                             pub unsafe extern $call_conv fn $initial_fn($params_with_type) $ret_type {
