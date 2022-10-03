@@ -110,30 +110,24 @@ pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
                     // if semicolon, then finish off parsing
                     if ';' == punct.as_char() {
                         // BEGIN BODY
-                        let mut init_function_block = "".to_string();
+                        let mut init_function_block = "dylink::".to_string();
                         if let TokenTree::Literal(ref li) = lib_name {
                             let mut li = li.to_string();
                             li.make_ascii_lowercase();
                             match li.as_str() {
                                 "\"vulkan-1\"" => {
-                                    init_function_block.push_str("dylink::vkloader(\"");
-                                    init_function_block.push_str(&function_name.to_string());
+                                    init_function_block
+                                        .push_str(&format!("vkloader(\"{function_name}"));
                                 }
                                 "\"opengl32\"" => {
-                                    init_function_block.push_str(
-                                        format(format_args!(
-                                            "dylink::glloader(\"{}",
-                                            function_name
-                                        ))
-                                        .as_str(),
-                                    );
+                                    init_function_block
+                                        .push_str(&format!("glloader(\"{function_name}"));
                                 }
-                                other => {
-                                    init_function_block.push_str("dylink::loader(");
-                                    init_function_block.push_str(other); // library name
+                                dll_name => {
+                                    init_function_block.push_str(&format!("loader({dll_name}"));
                                     init_function_block.pop(); // remove '\"' from the end
-                                    init_function_block.push_str(".dll\",\"");
-                                    init_function_block.push_str(&function_name.to_string());
+                                    init_function_block
+                                        .push_str(&format!(".dll\",\"{function_name}"));
                                     // function name
                                 }
                             }
@@ -214,22 +208,27 @@ pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
                             params_with_type.extend(quote!($param_name : $data_type,))
                         }
 
-                        //println!("{params}");
                         use std::sync::atomic::{AtomicU64, Ordering};
                         static MOD_COUNT: AtomicU64 = AtomicU64::new(0);
-                        let mod_count = MOD_COUNT.load(Ordering::Acquire);
-                        MOD_COUNT.store(mod_count + 1, Ordering::Release);
 
-                        let initial_fn: String =
-                            "__dylink_initializer".to_string() + &mod_count.to_string();
-                        let initial_fn = initial_fn.parse::<TokenStream>().unwrap();
+                        let initial_fn = format!(
+                            "__dylink_initializer{}",
+                            MOD_COUNT.fetch_add(1, Ordering::SeqCst)
+                        )
+                        .parse::<TokenStream>()
+                        .unwrap();
+
+                        let error_msg =
+                            format!("\"Dylink Error: `{function_name}` function not found\"")
+                                .parse::<TokenStream>()
+                                .unwrap();
 
                         item_ret.extend(quote!{
                             #[doc(hidden)]
                             #[inline(never)]
                             pub unsafe extern $call_conv fn $initial_fn($params_with_type) $ret_type {
                                 static START: std::sync::Once = std::sync::Once::new();
-                                $function_name.update(&START, ||std::mem::transmute($body));
+                                $function_name.update(&START, ||std::mem::transmute($body.expect($error_msg)));
                                 $function_name($params_no_type)
                             }
                             #[allow(non_upper_case_globals)]
