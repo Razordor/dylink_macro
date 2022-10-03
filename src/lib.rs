@@ -94,8 +94,8 @@ pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
     let call_conv = TokenStream::from(item_iter.clone().nth(1).unwrap());
     if let TokenTree::Group(group) = item_iter.nth(2).expect("p-0") {
         let mut item_ret = TokenStream::new();
-        let mut function_name = TokenStream::new();        
-        let mut param_list = TokenStream::new();
+        let mut function_name = TokenStream::new();
+        let mut signature = TokenStream::new();
         let mut vis = TokenStream::new();
         let mut command = Consume::Visibility;
         for token in group.stream() {
@@ -110,8 +110,7 @@ pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
                     // if semicolon, then finish off parsing
                     if ';' == punct.as_char() {
                         // BEGIN BODY
-                        let mut init_function_block =
-                            "".to_string();
+                        let mut init_function_block = "".to_string();
                         if let TokenTree::Literal(ref li) = lib_name {
                             let mut li = li.to_string();
                             li.make_ascii_lowercase();
@@ -145,17 +144,102 @@ pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
                         // PARSE BODY
                         let body = init_function_block.parse::<TokenStream>().unwrap();
 
-                        item_ret.extend(quote!{
+                                          
+                        let mut last_dash = false;
+                        let mut ret_type = TokenStream::new();
+                        let mut param_types = Vec::<TokenStream>::new();
+                        for meta in signature.clone().into_iter() {
+                            if !ret_type.is_empty() {
+                                ret_type.extend(quote!($meta));
+                            } else {                                
+                                match meta {
+                                    TokenTree::Group(group) => {
+                                        let mut last_ident = false;
+                                        let mut last_comma = true;
+                                        let mut next_param_type = false;
+                                        for arg in group.stream() {
+                                            match arg {
+                                                TokenTree::Ident(_) => {
+                                                    last_ident = true;
+                                                }
+                                                TokenTree::Punct(ref punct) => {
+                                                    match punct.as_char() {
+                                                        ',' => {
+                                                            last_comma = true;
+                                                            next_param_type = false;
+                                                        }
+                                                        ':' => if last_comma && last_ident {
+                                                            last_ident = false;
+                                                            last_comma = false;
+                                                            next_param_type = true;
+                                                            param_types.push(TokenStream::new());
+                                                            continue;
+                                                        }
+                                                        _ => (),
+                                                    }
+                                                }
+                                                _ => last_ident = false,
+                                            }
+                                            if next_param_type {
+                                                param_types.last_mut().unwrap().extend(quote!($arg));
+                                            }
+                                        }
+                                    }
+                                    TokenTree::Punct(ref punct) => {
+                                        let punct_char = punct.as_char();
+                                        if punct_char == '-' && punct.spacing() == Spacing::Joint {
+                                            last_dash = true;
+                                        } else if punct_char == '>' && last_dash {
+                                            last_dash = false;
+                                            ret_type.extend(quote!(->));
+                                        }
+                                    }
+                                    _ => (),
+                                }
+                            }
+                        }
+
+                        //assert!(has_ret, "function missing return type: {function_name}");
+                        
+                        let mut params_no_type = TokenStream::new();
+                        let mut params_with_type = TokenStream::new();
+                        let param_count = param_types.len();
+                        for (data_type, i) in param_types.into_iter().zip(0..param_count) {
+                            let param_name = "p".to_string() + &i.to_string();
+                            let param_name = param_name.parse::<TokenStream>().unwrap();
+                            params_no_type.extend(quote!($param_name,));
+                            params_with_type.extend(quote!($param_name : $data_type,))
+                        }
+
+                        //println!("{params}");
+                        use std::sync::atomic::{AtomicU64, Ordering};
+                        static MOD_COUNT: AtomicU64 = AtomicU64::new(0);
+                        let mod_count = MOD_COUNT.load(Ordering::Acquire);
+                        MOD_COUNT.store(mod_count + 1, Ordering::Release);
+                        
+                        let initial_fn: String = "__dylink_initializer".to_string() + &mod_count.to_string();
+                        let initial_fn = initial_fn.parse::<TokenStream>().unwrap();
+                        
+                        item_ret.extend(quote!{             
+                            #[doc(hidden)]
+                            #[inline]
+                            pub unsafe extern $call_conv fn $initial_fn($params_with_type) $ret_type {
+                                static START: std::sync::Once = std::sync::Once::new();
+                                START.call_once(||{
+                                    *std::cell::UnsafeCell::raw_get(&$function_name.0) = std::mem::transmute($body);
+                                });
+                                $function_name($params_no_type)
+                            }
                             #[allow(non_upper_case_globals)]
-                            $vis static $function_name: dylink::Lazy<unsafe extern $call_conv fn $param_list> 
-                            = dylink::Lazy::new(|| unsafe {
-                                std::mem::transmute($body)
-                            });
+                            $vis static $function_name
+                            : dylink::LazyFn<unsafe extern $call_conv fn $signature>
+                            = dylink::LazyFn::new($initial_fn);
                         });
+                        //panic!("{item_ret}");
 
                         // CLEAN UP
                         function_name = TokenStream::new();
-                        param_list = TokenStream::new();
+                        signature = TokenStream::new();
                         vis = TokenStream::new();
                         command = Consume::Visibility;
                         continue;
@@ -169,7 +253,7 @@ pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
                     function_name.extend(quote!($token));
                     command = Consume::Param;
                 }
-                Consume::Param => param_list.extend(quote!($token)),
+                Consume::Param => signature.extend(quote!($token)),
             }
         }
         item_ret
