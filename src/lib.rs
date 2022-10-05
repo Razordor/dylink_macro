@@ -210,7 +210,6 @@ pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
                             params_with_type.extend(quote!($param_name : $data_type,))
                         }
 
-                        
                         static MOD_COUNT: AtomicU64 = AtomicU64::new(0);
 
                         let initial_fn = format!(
@@ -227,8 +226,7 @@ pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
 
                         item_ret.extend(quote!{
                             #[doc(hidden)]
-                            #[inline(never)]
-                            pub unsafe extern $call_conv fn $initial_fn($params_with_type) $ret_type {
+                            unsafe extern $call_conv fn $initial_fn($params_with_type) $ret_type {
                                 static START: std::sync::Once = std::sync::Once::new();
                                 $function_name.update(&START, ||std::mem::transmute($call_linker.expect($error_msg)));
                                 $function_name($params_no_type)
