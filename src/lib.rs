@@ -101,8 +101,8 @@ pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
         let mut command = Consume::Visibility;
         for token in group.stream() {
             match &token {
-                TokenTree::Ident(identifier) => {
-                    if "fn" == identifier.clone().to_string() {
+                TokenTree::Ident(ident) => {
+                    if "fn" == ident.to_string() {
                         command = Consume::Prefix;
                         continue;
                     }
@@ -111,34 +111,26 @@ pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
                     // if semicolon, then finish off parsing
                     if ';' == punct.as_char() {
                         // BEGIN SELECT LINKER TYPE
-                        let mut init_function_block = "dylink::".to_string();
-                        if let TokenTree::Literal(ref li) = lib_name {
-                            let mut li = li.to_string();
-                            li.make_ascii_lowercase();
-                            match li.as_str() {
+                        let linker_type = if let TokenTree::Literal(ref li) = lib_name {
+                            match li.to_string().as_str() {
                                 "\"vulkan-1\"" => {
-                                    init_function_block
-                                        .push_str(&format!("vkloader(\"{function_name}\")"));
+                                    format!("dylink::vkloader(\"{function_name}\")")
                                 }
                                 "\"opengl32\"" => {
-                                    init_function_block
-                                        .push_str(&format!("glloader(\"{function_name}\")"));
+                                    format!("dylink::glloader(\"{function_name}\")")
                                 }
                                 dll_name => {
-                                    init_function_block.push_str(&format!("loader({dll_name}"));
-                                    init_function_block.pop(); // remove '\"' from the end
-                                    init_function_block
-                                        .push_str(&format!(".dll\",\"{function_name}\")"));
-                                    // function name
+                                    let mut dll_name = dll_name.to_string();
+                                    dll_name.pop().unwrap();
+                                    format!("dylink::loader({dll_name}.dll\",\"{function_name}\")")
                                 }
                             }
                         } else {
-                            panic!();
+                            panic!("Dylink Error: this should not happen")
                         }
+                        .parse::<TokenStream>()
+                        .unwrap();
                         // END SELECT LINKER TYPE
-
-                        // PARSE LINKER TYPE
-                        let call_linker = init_function_block.parse::<TokenStream>().unwrap();
 
                         let mut last_dash = false;
                         let mut ret_type = TokenStream::new();
@@ -228,7 +220,7 @@ pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
                             #[doc(hidden)]
                             unsafe extern $call_conv fn $initial_fn($params_with_type) $ret_type {
                                 static START: std::sync::Once = std::sync::Once::new();
-                                $function_name.update(&START, ||std::mem::transmute($call_linker.expect($error_msg)));
+                                $function_name.update(&START, ||std::mem::transmute($linker_type.expect($error_msg)));
                                 $function_name($params_no_type)
                             }
                             #[allow(non_upper_case_globals)]
