@@ -4,80 +4,6 @@ use proc_macro::*;
 use std::fmt::format;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-macro_rules! tk_error_msg {
-    ($name:literal, &$expected:ident, &$found:ident) => {
-        return format(format_args!(
-            "compile_error!(\"{} error: expected `{}`, but found `{}`.\");",
-            $name, $expected, $found
-        ))
-        .parse()
-        .unwrap();
-    };
-    ($name:literal, $expected:ident, $found:ident) => {
-        return format(format_args!(
-            "compile_error!(\"{} error: expected `{}`, but found `{}`.\");",
-            $name, $expected, $found
-        ))
-        .parse()
-        .unwrap();
-    };
-}
-
-macro_rules! tk_assert_eq {
-    ($stream:ident [$index:literal] , Ident($val:literal)) => {
-        if let TokenTree::Ident(id) = &($stream.clone().into_iter())
-            .nth($index)
-            .expect("expected identifier, found nothing")
-        {
-            let found = id.to_string();
-            let expected = $val.to_string();
-            if found != expected {
-                tk_error_msg!("identifier", &expected, &found);
-            }
-        } else {
-            panic!(
-                "expected identifier, but found `{:?}`",
-                $stream.clone().into_iter().clone().nth($index).unwrap()
-            )
-        }
-    };
-    ($stream:ident [$index:literal] , Punct($val:literal)) => {
-        if let TokenTree::Punct(punct) = &($stream.clone().into_iter())
-            .nth($index)
-            .expect("expected punctuation, found nothing")
-        {
-            let expected = $val;
-            let found = punct.as_char();
-            if found != $val {
-                tk_error_msg!("punctuation", expected, found);
-            }
-        } else {
-            panic!(
-                "expected punctuation, but found `{:?}`",
-                $stream.clone().into_iter().clone().nth($index).unwrap()
-            )
-        }
-    };
-    ($stream:ident [$index:literal] , Literal(_)) => {
-        if let TokenTree::Literal(_) = &($stream.clone().into_iter())
-            .nth($index)
-            .expect("expected literal, found nothing")
-        {
-        } else {
-            return "compile_error!(\"expected literal\");".parse().unwrap();
-        }
-    };
-    ($stream:ident [$index:literal] , Group(_)) => {
-        if let TokenTree::Group(_) = &($stream.clone().into_iter())
-            .nth($index)
-            .expect("expected group, found nothing")
-        {
-        } else {
-            return "compile_error!(\"expected group\");".parse().unwrap();
-        }
-    };
-}
-
 #[derive(Clone, Copy)]
 enum Consume {
     Visibility,
@@ -87,10 +13,37 @@ enum Consume {
 
 #[proc_macro_attribute]
 pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
-    tk_assert_eq!(attr[0], Ident("name"));
-    tk_assert_eq!(attr[1], Punct('='));
-    tk_assert_eq!(attr[2], Literal(_));
-    let lib_name = attr.into_iter().nth(2).unwrap();
+    let mut is_vulkan = false;
+    let mut is_opengl = false;
+    let mut default_attr = 0;
+    let mut custom_lib = String::new();
+    for (i, token) in attr.into_iter().enumerate() {
+        match token {
+            TokenTree::Ident(ident) => {
+                assert_eq!(i, 0);
+                match ident.to_string().as_str() {
+                    "vulkan" => is_vulkan = true,
+                    "opengl" => is_opengl = true,
+                    "name" => default_attr = 1,
+                    _ => (),
+                }
+            },
+            TokenTree::Punct(punct) => {
+                assert_eq!(i, 1);
+                if punct.as_char() == '=' {
+                    default_attr += 1;
+                }
+            },
+            TokenTree::Literal(library) => {
+                assert_eq!(i, 2);
+                default_attr += 1;
+                custom_lib = library.to_string();
+                custom_lib.pop().unwrap();
+            }
+            _ => panic!(),
+        }
+    }
+    assert!(is_vulkan || is_opengl || default_attr == 3, "invalid attribute parameter");
 
     let mut call_conv = TokenStream::new();
     let mut item_ret = TokenStream::new();
@@ -114,27 +67,16 @@ pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
                         TokenTree::Punct(punct) => {
                             // if semicolon, then finish off parsing
                             if ';' == punct.as_char() {
-                                // BEGIN SELECT LINKER TYPE
-                                let linker_type = if let TokenTree::Literal(ref li) = lib_name {
-                                    match li.to_string().as_str() {
-                                        "\"vulkan-1\"" => {
-                                            format!("dylink::vkloader(\"{function_name}\")")
-                                        }
-                                        "\"opengl32\"" => {
-                                            format!("dylink::glloader(\"{function_name}\")")
-                                        }
-                                        dll_name => {
-                                            let mut dll_name = dll_name.to_string();
-                                            dll_name.pop().unwrap();
-                                            format!("dylink::loader({dll_name}.dll\",\"{function_name}\")")
-                                        }
-                                    }
+                                let linker_type = if is_vulkan {
+                                    format!("dylink::vkloader(\"{function_name}\")")
+                                } else if is_opengl {
+                                    format!("dylink::glloader(\"{function_name}\")")
                                 } else {
-                                    panic!("Dylink Error: this should not happen")
+                                    
+                                    format!("dylink::loader({custom_lib}.dll\",\"{function_name}\")")
                                 }
                                 .parse::<TokenStream>()
                                 .unwrap();
-                                // END SELECT LINKER TYPE
 
                                 let mut last_dash = false;
                                 let mut ret_type = TokenStream::new();
