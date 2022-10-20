@@ -9,13 +9,34 @@ enum Consume {
     Signature,
 }
 
-struct LinkerData {
-    lib_name: String,
-    call_conv: TokenStream,
+#[proc_macro_attribute]
+pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
+    // TODO: provide alternative parse for function form
+    let mut item_iter = item.into_iter();
+    if let TokenTree::Ident(kw) = item_iter.next().unwrap() {
+        assert!(kw.to_string() == "extern");
+    } else {
+        return "compile_error!(\"expected keyword `extern`\");"
+            .parse::<TokenStream>()
+            .unwrap();
+    }
+    let call_conv = if let Some(literal @ TokenTree::Literal(_)) = item_iter.next() {
+        TokenStream::from(literal)
+    } else {
+        return "compile_error!(\"expected literal\");"
+            .parse::<TokenStream>()
+            .unwrap();
+    };
+    if let TokenTree::Group(group) = item_iter.next().unwrap() {
+        parse_fn_list(group.stream(), get_link_type(attr).unwrap(), call_conv)
+    } else {
+        "compile_error!(\"expected group\");"
+            .parse::<TokenStream>()
+            .unwrap()
+    }
 }
 
-#[proc_macro_attribute]
-pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {    
+fn get_link_type(attr: TokenStream) -> Result<TokenStream, LexError> {
     let mut default_attr = 0;
     let mut lib_name = String::new();
     for (i, token) in attr.into_iter().enumerate() {
@@ -47,45 +68,26 @@ pub fn dylink(attr: TokenStream, item: TokenStream) -> TokenStream {
         "invalid attribute parameter"
     );
 
-    let mut item_iter = item.into_iter();
-    if let TokenTree::Ident(kw) = item_iter.next().unwrap() {
-        assert!(kw.to_string() == "extern");
-    } else {
-        return "compile_error!(\"expected keyword `extern`\");"
-            .parse::<TokenStream>()
-            .unwrap();
+    match lib_name.as_str() {
+        "vulkan" => "LinkType::Vulkan".to_owned(),
+        "opengl" => "LinkType::OpenGL".to_owned(),
+        lib_name => {
+            format!("LinkType::General{{library: {lib_name}.dll\"}}")
+        }
     }
-    let call_conv = if let Some(literal @ TokenTree::Literal(_)) = item_iter.next() {
-        TokenStream::from(literal)
-    } else {
-        return "compile_error!(\"expected literal\");"
-            .parse::<TokenStream>()
-            .unwrap();
-    };
-    if let TokenTree::Group(group) = item_iter.next().unwrap() {
-        parse_fn_list(
-            group.stream(),
-            LinkerData {
-                lib_name,
-                call_conv,
-            },
-        )
-    } else {
-        "compile_error!(\"expected group\");"
-            .parse::<TokenStream>()
-            .unwrap()
-    }
+    .parse()
 }
 
-fn parse_fn_list(list: TokenStream, metadata: LinkerData) -> TokenStream {
-    let call_conv = metadata.call_conv;
+fn parse_fn_list(list: TokenStream, link_type: TokenStream, call_conv: TokenStream) -> TokenStream {
     let mut item_ret = TokenStream::new();
     let mut function_name = TokenStream::new();
     let mut signature = TokenStream::new();
     let mut vis = TokenStream::new();
     let mut command = Consume::Visibility;
 
-    let mut tk_list = list.into_iter();
+    let lazyfn_path: TokenStream = "dylink::lazyfn".parse().unwrap();
+
+    let mut tk_list = list.into_iter().peekable();
     while let Some(token) = tk_list.next() {
         match &token {
             TokenTree::Ident(ident) => {
@@ -102,23 +104,10 @@ fn parse_fn_list(list: TokenStream, metadata: LinkerData) -> TokenStream {
             TokenTree::Punct(punct) => {
                 // if semicolon, then finish off parsing
                 if ';' == punct.as_char() {
-                    let linker_type = if metadata.lib_name == "vulkan" {
-                        format!("dylink::vkloader(\"{function_name}\")")
-                    } else if metadata.lib_name == "opengl" {
-                        format!("dylink::glloader(\"{function_name}\")")
-                    } else {
-                        format!(
-                            "dylink::loader({}.dll\",\"{function_name}\")",
-                            metadata.lib_name
-                        )
-                    }
-                    .parse::<TokenStream>()
-                    .unwrap();
-
                     let mut last_dash = false;
                     let mut ret_type = TokenStream::new();
                     let mut param_types = Vec::<TokenStream>::new();
-                    for meta in signature.clone().into_iter() {
+                    for meta in signature.into_iter() {
                         if !ret_type.is_empty() {
                             ret_type.extend(quote!($meta));
                         } else {
@@ -168,6 +157,7 @@ fn parse_fn_list(list: TokenStream, metadata: LinkerData) -> TokenStream {
                             }
                         }
                     }
+                    signature = TokenStream::new();
 
                     let mut params_no_type = TokenStream::new();
                     let mut params_with_type = TokenStream::new();
@@ -179,33 +169,28 @@ fn parse_fn_list(list: TokenStream, metadata: LinkerData) -> TokenStream {
 
                     static MOD_COUNT: AtomicU64 = AtomicU64::new(0);
 
-                    let initial_fn = format!(
+                    let initial_fn: TokenStream = format!(
                         "__dylink_initializer{}",
                         MOD_COUNT.fetch_add(1, Ordering::SeqCst)
                     )
-                    .parse::<TokenStream>()
+                    .parse()
                     .unwrap();
 
-                    let error_msg =
-                        format!("\"Dylink Error: `{function_name}` function not found\"")
-                            .parse::<TokenStream>()
-                            .unwrap();
-
-                    item_ret.extend(quote!{
+                    item_ret.extend(quote! {
                         #[doc(hidden)]
                         unsafe extern $call_conv fn $initial_fn($params_with_type) $ret_type {
-                            $function_name.update(||std::mem::transmute($linker_type.expect($error_msg)));
+                            $function_name.link_addr($lazyfn_path::$link_type).unwrap();
                             $function_name($params_no_type)
                         }
                         #[allow(non_upper_case_globals)]
                         $vis static $function_name
-                        : dylink::LazyFn<unsafe extern $call_conv fn $signature>
-                        = dylink::LazyFn::new($initial_fn);
+                        : $lazyfn_path::LazyFn<unsafe extern $call_conv fn($params_with_type) $ret_type>
+                        = $lazyfn_path::LazyFn::new(stringify!($function_name), $initial_fn);
                     });
 
                     // CLEAN UP
                     function_name = TokenStream::new();
-                    signature = TokenStream::new();
+
                     vis = TokenStream::new();
                     command = Consume::Visibility;
                     continue;
