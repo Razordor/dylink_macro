@@ -179,8 +179,10 @@ fn parse_fn_list(list: TokenStream, link_type: TokenStream, call_conv: TokenStre
                     item_ret.extend(quote! {
                         #[doc(hidden)]
                         unsafe extern $call_conv fn $initial_fn($params_with_type) $ret_type {
-                            $function_name.link_addr($lazyfn_path::$link_type).unwrap();
-                            $function_name($params_no_type)
+                            match $function_name.link_addr($lazyfn_path::$link_type) {
+                                Ok(function) => function($params_no_type),
+                                Err(err) => panic!("{err}"),
+                            }
                         }
                         #[allow(non_upper_case_globals)]
                         $vis static $function_name
