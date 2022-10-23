@@ -10,3 +10,7 @@ description = "Dynamic function loading attribute."
 
 [lib]
 proc-macro=true
+
+[dependencies]
+syn = { version = "1.0", features = ["full", "extra-traits"]}
+quote = "1.0"
