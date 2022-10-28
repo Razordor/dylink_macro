@@ -81,7 +81,7 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
         #[doc(hidden)]
         #[inline(never)]
         #unsafety #abi fn #initial_fn(#params_with_type) #output {
-            match #fn_name.link_lib(stringify!(#fn_name), dylink::lazyfn::#link_type) {
+            match #fn_name.link_lib(dylink::lazyfn::#link_type) {
                 Ok(function) => function(#params_no_type),
                 Err(err) => panic!("{}", err),
             }
@@ -91,7 +91,7 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
         #fn_attrs
         #vis static #fn_name
         : dylink::lazyfn::LazyFn<#unsafety #abi fn(#params_default) #output>
-        = dylink::lazyfn::LazyFn::new(#initial_fn);
+        = dylink::lazyfn::LazyFn::new(stringify!(#fn_name), #initial_fn);
     }
 }
 
@@ -121,11 +121,9 @@ fn get_link_type(args: syn::Expr) -> Result<TokenStream2, syn::Error> {
             }
             if let Expr::Lit(ExprLit { lit, .. }) = *assign.right {
                 if let Lit::Str(lib) = lit {
-                    Ok(
-                        format!("LinkType::General{{library: \"{}.dll\"}}", lib.value())
-                            .parse()
-                            .unwrap(),
-                    )
+                    Ok(format!("LinkType::Normal(\"{}\")", lib.value())
+                        .parse()
+                        .unwrap())
                 } else {
                     Err(Error::new(lit.span(), "expected `name`"))
                 }
