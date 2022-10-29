@@ -72,10 +72,14 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
     .parse()
     .unwrap();
 
-    let unsafety: TokenStream2 = fn_item
-        .sig
-        .unsafety
-        .map_or(TokenStream2::new(), |r| r.to_token_stream());
+    let unsafety = if cfg!(feature = "force_unsafe") {
+        quote!(unsafe)
+    } else {
+        fn_item
+            .sig
+            .unsafety
+            .map_or(TokenStream2::new(), |r| r.to_token_stream())
+    };
 
     quote! {
         #[doc(hidden)]
