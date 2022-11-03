@@ -42,6 +42,7 @@ pub fn dylink(args: TokenStream1, input: TokenStream1) -> TokenStream1 {
 fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream2) -> TokenStream2 {
     let fn_name = fn_item.sig.ident.into_token_stream();
     let abi = abi.into_token_stream();
+    //let generics = fn_item.sig.generics.into_token_stream();
     let vis = fn_item.vis.into_token_stream();
     let output = fn_item.sig.output.into_token_stream();
 
@@ -64,13 +65,20 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
         }
     }
 
+    // TODO: replace with `Span::def_site()` when stable, but
+    // until then, dylink_macro will be disgustingly unhygienic
+    let initial_fn_span = Span::mixed_site();
+
     static MOD_COUNT: AtomicU64 = AtomicU64::new(0);
-    let initial_fn: TokenStream2 = format!(
-        "__dylink_initializer{}",
-        MOD_COUNT.fetch_add(1, Ordering::SeqCst)
+    let initial_fn_tree: TokenTree = Ident::new(
+        &format!(
+            "__dylink_initializer{}",
+            MOD_COUNT.fetch_add(1, Ordering::SeqCst)
+        ),
+        initial_fn_span,
     )
-    .parse()
-    .unwrap();
+    .into();
+    let initial_fn: TokenStream2 = syn::parse2(initial_fn_tree.into()).unwrap();
 
     let unsafety = if cfg!(feature = "force_unsafe") {
         quote!(unsafe)
@@ -84,7 +92,7 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
     quote! {
         #[doc(hidden)]
         #[inline(never)]
-        #unsafety #abi fn #initial_fn(#params_with_type) #output {
+        #unsafety #abi fn #initial_fn (#params_with_type) #output {
             match #fn_name.link_lib(dylink::lazyfn::#link_type) {
                 Ok(function) => function(#params_no_type),
                 Err(err) => panic!("{}", err),
@@ -94,7 +102,7 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
         #[allow(non_upper_case_globals)]
         #fn_attrs
         #vis static #fn_name
-        : dylink::lazyfn::LazyFn<#unsafety #abi fn(#params_default) #output>
+        : dylink::lazyfn::LazyFn<#unsafety #abi fn (#params_default) #output>
         = dylink::lazyfn::LazyFn::new(stringify!(#fn_name), #initial_fn);
     }
 }
