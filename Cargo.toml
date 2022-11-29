@@ -4,9 +4,10 @@ version = "0.1.1"
 authors = ["Jonathan Thomason"]
 edition = "2021"
 readme = "readme.md"
-license = "MIT"
+license = "MIT OR Apache-2.0"
 keywords = ["ffi", "macro", "attribute"]
 description = "Dynamic function loading attribute."
+publish = false
 
 [lib]
 proc-macro=true
@@ -18,5 +19,5 @@ proc-macro2 = "1.0"
 
 [features]
 default = ["force_unsafe"]
-warn_diag = []
+diagnostic = []
 force_unsafe = []

@@ -8,9 +8,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use proc_macro::TokenStream as TokenStream1;
 use proc_macro2::{TokenStream as TokenStream2, *};
-use syn::parse_macro_input;
+use syn::{parse_macro_input, spanned::Spanned};
 
-mod diag;
+mod diagnostic;
 
 // TODO: add a derive macro that deals with the dylink vulkan trait
 
@@ -19,8 +19,8 @@ pub fn dylink(args: TokenStream1, input: TokenStream1) -> TokenStream1 {
     let args = TokenStream2::from(args);
     let foreign_mod = parse_macro_input!(input as syn::ItemForeignMod);
 
-    #[cfg(feature = "warn_diag")]
-    diag::foreign_mod_warn(&foreign_mod);
+    #[cfg(feature = "diagnostic")]
+    diagnostic::foreign_mod_diag(&foreign_mod);
 
     let link_type = match get_link_type(syn::parse2(args).unwrap()) {
         Ok(tk) => tk,
@@ -28,7 +28,7 @@ pub fn dylink(args: TokenStream1, input: TokenStream1) -> TokenStream1 {
             return e.into_compile_error().into();
         }
     };
-    let mut ret = TokenStream::new();
+    let mut ret = TokenStream2::new();
     for item in foreign_mod.items {
         use syn::ForeignItem;
         match item {
@@ -51,17 +51,21 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
         fn_attrs.extend(attr.into_token_stream());
     }
 
-    let mut params_no_type = TokenStream2::new();
-    let mut params_with_type = TokenStream2::new();
+    let mut param_list = Vec::new();
+    let mut param_ty_list = Vec::new();
     let params_default = fn_item.sig.inputs.to_token_stream();
     for (i, arg) in fn_item.sig.inputs.iter().enumerate() {
-        if let syn::FnArg::Typed(pat) = arg {
-            let ty = pat.ty.to_token_stream();
-            let param_name = format!("p{i}").parse::<TokenStream2>().unwrap();
-            params_no_type.extend(quote!(#param_name,));
-            params_with_type.extend(quote!(#param_name : #ty,));
-        } else {
-            unreachable!("self arguments make no sense")
+        match arg {
+            syn::FnArg::Typed(pat) => {
+                let ty = pat.ty.to_token_stream();
+                let param_name = format!("p{i}").parse::<TokenStream2>().unwrap();
+                param_list.push(param_name.clone());
+                param_ty_list.push(quote!(#param_name : #ty));
+            }
+            syn::FnArg::Receiver(rec) => {
+                return syn::Error::new(rec.span(), "`self` arguments are unsupported")
+                    .into_compile_error();
+            }
         }
     }
 
@@ -80,6 +84,7 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
     .into();
     let initial_fn: TokenStream2 = syn::parse2(initial_fn_tree.into()).unwrap();
 
+    // TODO: turn this into a diagnostic
     let unsafety = if cfg!(feature = "force_unsafe") {
         quote!(unsafe)
     } else {
@@ -92,9 +97,9 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
     quote! {
         #[doc(hidden)]
         #[inline(never)]
-        #unsafety #abi fn #initial_fn (#params_with_type) #output {
+        #unsafety #abi fn #initial_fn (#(#param_ty_list),*) #output {
             match #fn_name.link_lib(dylink::lazyfn::#link_type) {
-                Ok(function) => function(#params_no_type),
+                Ok(function) => function(#(#param_list),*),
                 Err(err) => panic!("{}", err),
             }
         }
@@ -109,7 +114,7 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
 
 fn get_link_type(args: syn::Expr) -> Result<TokenStream2, syn::Error> {
     use std::str::FromStr;
-    use syn::{spanned::Spanned, *};
+    use syn::*;
     match args {
         Expr::Path(ExprPath { path, .. }) => {
             if path.is_ident("vulkan") {
