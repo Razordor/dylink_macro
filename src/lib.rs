@@ -7,11 +7,9 @@ use quote::*;
 
 use proc_macro::TokenStream as TokenStream1;
 use proc_macro2::TokenStream as TokenStream2;
-use syn::{parse_macro_input, spanned::Spanned, Pat};
+use syn::{parse_macro_input, spanned::Spanned};
 
 mod diagnostic;
-
-// TODO: add a derive macro that deals with the dylink vulkan trait
 
 #[proc_macro_attribute]
 pub fn dylink(args: TokenStream1, input: TokenStream1) -> TokenStream1 {
@@ -44,10 +42,11 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
     let vis = fn_item.vis.into_token_stream();
     let output = fn_item.sig.output.into_token_stream();
 
-    let mut fn_attrs = TokenStream2::new();
-    for attr in fn_item.attrs {
-        fn_attrs.extend(attr.into_token_stream());
-    }
+    let fn_attrs: Vec<TokenStream2> = fn_item
+        .attrs
+        .iter()
+        .map(syn::Attribute::to_token_stream)
+        .collect();
 
     let mut param_list = Vec::new();
     let mut param_ty_list = Vec::new();
@@ -57,8 +56,8 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
             syn::FnArg::Typed(pat_type) => {
                 let ty = pat_type.ty.to_token_stream();
                 let param_name = match pat_type.pat.as_ref() {
-                    Pat::Wild(_) => format!("p{i}").parse::<TokenStream2>().unwrap(),
-                    Pat::Ident(pat_id) => pat_id.ident.to_token_stream(),
+                    syn::Pat::Wild(_) => format!("p{i}").parse::<TokenStream2>().unwrap(),
+                    syn::Pat::Ident(pat_id) => pat_id.ident.to_token_stream(),
                     _ => unreachable!(),
                 };
                 param_list.push(param_name.clone());
@@ -69,7 +68,7 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
                     .into_compile_error();
             }
         }
-    }    
+    }
 
     // TODO: turn this into a diagnostic
     let unsafety = if cfg!(feature = "force_unsafe") {
@@ -81,18 +80,36 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
             .map_or(TokenStream2::new(), |r| r.to_token_stream())
     };
 
+    let call_dyn_func = if fn_name.to_string() == "vkCreateInstance" {
+        let inst_param = &param_list[2];
+        quote! {
+            let result = function(#(#param_list),*);
+            unsafe {
+                // whatever type the user uses must match this ABI, so transmute will always work
+                dylink::use_instance(*std::mem::transmute::<_, &mut dylink::VkInstance>(#inst_param));
+            }
+            result
+        }
+    } else if fn_name.to_string() == "vkDestroyInstance" {
+        quote! {
+            dylink::use_instance(ptr::null());
+            function(#(#param_list),*)            
+        }
+    } else {
+        quote!(function(#(#param_list),*))
+    };
+
     quote! {
+        #(#fn_attrs)*
         #[allow(non_snake_case)]
         #[inline]
         #vis #unsafety #abi fn #fn_name (#(#param_ty_list),*) #output {
             #abi fn initial_fn (#(#param_ty_list),*) #output {
                 match DYN_FUNC.link() {
-                    Ok(function) => function(#(#param_list),*),
+                    Ok(function) => {#call_dyn_func},
                     Err(err) => panic!("{}", err),
                 }
             }
-
-            #fn_attrs
             static DYN_FUNC
             : dylink::lazyfn::LazyFn<#abi fn (#params_default) #output>
             = dylink::lazyfn::LazyFn::new(stringify!(#fn_name), initial_fn, dylink::lazyfn::#link_type);
