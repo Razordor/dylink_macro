@@ -4,10 +4,9 @@
 #![feature(proc_macro_span)]
 
 use quote::*;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use proc_macro::TokenStream as TokenStream1;
-use proc_macro2::{TokenStream as TokenStream2, *};
+use proc_macro2::TokenStream as TokenStream2;
 use syn::{parse_macro_input, spanned::Spanned};
 
 mod diagnostic;
@@ -42,7 +41,6 @@ pub fn dylink(args: TokenStream1, input: TokenStream1) -> TokenStream1 {
 fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream2) -> TokenStream2 {
     let fn_name = fn_item.sig.ident.into_token_stream();
     let abi = abi.into_token_stream();
-    //let generics = fn_item.sig.generics.into_token_stream();
     let vis = fn_item.vis.into_token_stream();
     let output = fn_item.sig.output.into_token_stream();
 
@@ -67,22 +65,7 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
                     .into_compile_error();
             }
         }
-    }
-
-    // TODO: replace with `Span::def_site()` when stable, but
-    // until then, dylink_macro will be disgustingly unhygienic
-    let initial_fn_span = Span::mixed_site();
-
-    static MOD_COUNT: AtomicU64 = AtomicU64::new(0);
-    let initial_fn_tree: TokenTree = Ident::new(
-        &format!(
-            "__dylink_initializer{}",
-            MOD_COUNT.fetch_add(1, Ordering::SeqCst)
-        ),
-        initial_fn_span,
-    )
-    .into();
-    let initial_fn: TokenStream2 = syn::parse2(initial_fn_tree.into()).unwrap();
+    }    
 
     // TODO: turn this into a diagnostic
     let unsafety = if cfg!(feature = "force_unsafe") {
@@ -95,20 +78,25 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
     };
 
     quote! {
-        #[doc(hidden)]
-        #[inline(never)]
-        #unsafety #abi fn #initial_fn (#(#param_ty_list),*) #output {
-            match #fn_name.link() {
-                Ok(function) => function(#(#param_list),*),
-                Err(err) => panic!("{}", err),
+        #[allow(non_snake_case)]
+        #[inline(always)]
+        #vis #unsafety #abi fn #fn_name (#(#param_ty_list),*) #output {
+            #[doc(hidden)]
+            #[inline(never)]
+            #unsafety #abi fn initial_fn (#(#param_ty_list),*) #output {
+                match DYN_FUNC.link() {
+                    Ok(function) => function(#(#param_list),*),
+                    Err(err) => panic!("{}", err),
+                }
             }
-        }
 
-        #[allow(non_upper_case_globals)]
-        #fn_attrs
-        #vis static #fn_name
-        : dylink::lazyfn::LazyFn<#unsafety #abi fn (#params_default) #output>
-        = dylink::lazyfn::LazyFn::new(stringify!(#fn_name), #initial_fn, dylink::lazyfn::#link_type);
+            #fn_attrs
+            static DYN_FUNC
+            : dylink::lazyfn::LazyFn<#unsafety #abi fn (#params_default) #output>
+            = dylink::lazyfn::LazyFn::new(stringify!(#fn_name), initial_fn, dylink::lazyfn::#link_type);
+
+            DYN_FUNC(#(#param_list),*)
+        }
     }
 }
 
