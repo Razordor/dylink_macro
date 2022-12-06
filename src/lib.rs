@@ -92,7 +92,7 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
         }
     } else if fn_name.to_string() == "vkDestroyInstance" {
         quote! {
-            dylink::use_instance(ptr::null());
+            unsafe {dylink::use_instance(ptr::null());}
             function(#(#param_list),*)            
         }
     } else {
