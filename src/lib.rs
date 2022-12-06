@@ -7,7 +7,7 @@ use quote::*;
 
 use proc_macro::TokenStream as TokenStream1;
 use proc_macro2::TokenStream as TokenStream2;
-use syn::{parse_macro_input, spanned::Spanned};
+use syn::{parse_macro_input, spanned::Spanned, Pat};
 
 mod diagnostic;
 
@@ -54,9 +54,13 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
     let params_default = fn_item.sig.inputs.to_token_stream();
     for (i, arg) in fn_item.sig.inputs.iter().enumerate() {
         match arg {
-            syn::FnArg::Typed(pat) => {
-                let ty = pat.ty.to_token_stream();
-                let param_name = format!("p{i}").parse::<TokenStream2>().unwrap();
+            syn::FnArg::Typed(pat_type) => {
+                let ty = pat_type.ty.to_token_stream();
+                let param_name = match pat_type.pat.as_ref() {
+                    Pat::Wild(_) => format!("p{i}").parse::<TokenStream2>().unwrap(),
+                    Pat::Ident(pat_id) => pat_id.ident.to_token_stream(),
+                    _ => unreachable!(),
+                };
                 param_list.push(param_name.clone());
                 param_ty_list.push(quote!(#param_name : #ty));
             }
