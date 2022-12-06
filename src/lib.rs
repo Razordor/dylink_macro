@@ -79,11 +79,9 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
 
     quote! {
         #[allow(non_snake_case)]
-        #[inline(always)]
+        #[inline]
         #vis #unsafety #abi fn #fn_name (#(#param_ty_list),*) #output {
-            #[doc(hidden)]
-            #[inline(never)]
-            #unsafety #abi fn initial_fn (#(#param_ty_list),*) #output {
+            #abi fn initial_fn (#(#param_ty_list),*) #output {
                 match DYN_FUNC.link() {
                     Ok(function) => function(#(#param_list),*),
                     Err(err) => panic!("{}", err),
@@ -92,7 +90,7 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
 
             #fn_attrs
             static DYN_FUNC
-            : dylink::lazyfn::LazyFn<#unsafety #abi fn (#params_default) #output>
+            : dylink::lazyfn::LazyFn<#abi fn (#params_default) #output>
             = dylink::lazyfn::LazyFn::new(stringify!(#fn_name), initial_fn, dylink::lazyfn::#link_type);
 
             DYN_FUNC(#(#param_list),*)
