@@ -86,7 +86,11 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
             let result = DYN_FUNC(#(#param_list),*);
             unsafe {
                 // transmutes to be the same type as vkCreateInstance's 3rd param.
-                dylink::Global.insert_instance(*std::mem::transmute::<_, *mut dylink::VkInstance>(#inst_param))
+                dylink::Global.insert_instance(
+                    std::mem::transmute::<_, *mut dylink::VkInstance>(#inst_param)
+                        .as_ref()
+                        .unwrap()
+                );
             }
             result
         }
@@ -96,7 +100,7 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
             let result = DYN_FUNC(#(#param_list),*);
             unsafe {
                 // transmutes to be the same type as vkDestroyInstance's 1st param.
-                dylink::Global.remove_instance(std::mem::transmute::<_, dylink::VkInstance>(#inst_param))
+                dylink::Global.remove_instance(&std::mem::transmute::<_, dylink::VkInstance>(#inst_param));
             }
             result
         }
