@@ -83,20 +83,25 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
     let call_dyn_func = if fn_name.to_string() == "vkCreateInstance" {
         let inst_param = &param_list[2];
         quote! {
-            let result = function(#(#param_list),*);
+            let result = DYN_FUNC(#(#param_list),*);
             unsafe {
-                // whatever type the user uses must match this ABI, so transmute will always work
-                dylink::use_instance(*std::mem::transmute::<_, &mut dylink::VkInstance>(#inst_param));
+                // transmutes to be the same type as vkCreateInstance's 3rd param.
+                dylink::Global.insert_instance(*std::mem::transmute::<_, *mut dylink::VkInstance>(#inst_param))
             }
             result
         }
     } else if fn_name.to_string() == "vkDestroyInstance" {
+        let inst_param = &param_list[0];
         quote! {
-            unsafe {dylink::use_instance(ptr::null());}
-            function(#(#param_list),*)            
+            let result = DYN_FUNC(#(#param_list),*);
+            unsafe {
+                // transmutes to be the same type as vkDestroyInstance's 1st param.
+                dylink::Global.remove_instance(std::mem::transmute::<_, dylink::VkInstance>(#inst_param))
+            }
+            result
         }
     } else {
-        quote!(function(#(#param_list),*))
+        quote!(DYN_FUNC(#(#param_list),*))
     };
 
     quote! {
@@ -106,7 +111,7 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
         #vis #unsafety #abi fn #fn_name (#(#param_ty_list),*) #output {
             #abi fn initial_fn (#(#param_ty_list),*) #output {
                 match DYN_FUNC.link() {
-                    Ok(function) => {#call_dyn_func},
+                    Ok(function) => {function(#(#param_list),*)},
                     Err(err) => panic!("{}", err),
                 }
             }
@@ -114,7 +119,7 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
             : dylink::lazyfn::LazyFn<#abi fn (#params_default) #output>
             = dylink::lazyfn::LazyFn::new(stringify!(#fn_name), initial_fn, dylink::lazyfn::#link_type);
 
-            DYN_FUNC(#(#param_list),*)
+            #call_dyn_func
         }
     }
 }
