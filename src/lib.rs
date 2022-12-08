@@ -69,8 +69,9 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
             }
         }
     }
-
-    let call_dyn_func = if fn_name.to_string() == "vkCreateInstance" {
+    let is_vulkan_ty = link_type.to_string() == "LinkType :: Vulkan";
+    let call_dyn_func = 
+        if is_vulkan_ty && fn_name.to_string() == "vkCreateInstance" {
         let inst_param = &param_list[2];
         quote! {
             let result = DYN_FUNC(#(#param_list),*);
@@ -84,7 +85,7 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
             }
             result
         }
-    } else if fn_name.to_string() == "vkDestroyInstance" {
+    } else if is_vulkan_ty && fn_name.to_string() == "vkDestroyInstance" {
         let inst_param = &param_list[0];
         quote! {
             let result = DYN_FUNC(#(#param_list),*);
@@ -98,7 +99,8 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
         quote!(DYN_FUNC(#(#param_list),*))
     };
 
-    // Foreign functions are assumed unsafe, so functions are implicitly prepended with `unsafe`
+    // According to "The Rustonomicon" foreign functions are assumed unsafe, 
+    // so functions are implicitly prepended with `unsafe`
     quote! {
         #(#fn_attrs)*
         #[allow(non_snake_case)]
