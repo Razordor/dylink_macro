@@ -70,16 +70,6 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
         }
     }
 
-    // TODO: turn this into a diagnostic
-    let unsafety = if cfg!(feature = "force_unsafe") {
-        quote!(unsafe)
-    } else {
-        fn_item
-            .sig
-            .unsafety
-            .map_or(TokenStream2::new(), |r| r.to_token_stream())
-    };
-
     let call_dyn_func = if fn_name.to_string() == "vkCreateInstance" {
         let inst_param = &param_list[2];
         quote! {
@@ -108,11 +98,12 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
         quote!(DYN_FUNC(#(#param_list),*))
     };
 
+    // Foreign functions are assumed unsafe, so functions are implicitly prepended with `unsafe`
     quote! {
         #(#fn_attrs)*
         #[allow(non_snake_case)]
         #[inline]
-        #vis #unsafety #abi fn #fn_name (#(#param_ty_list),*) #output {
+        #vis unsafe #abi fn #fn_name (#(#param_ty_list),*) #output {
             #abi fn initial_fn (#(#param_ty_list),*) #output {
                 match DYN_FUNC.link() {
                     Ok(function) => {function(#(#param_list),*)},
