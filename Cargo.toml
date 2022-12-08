@@ -19,3 +19,4 @@ proc-macro2 = "1.0"
 
 [features]
 diagnostic = []
+no_lifetimes = []

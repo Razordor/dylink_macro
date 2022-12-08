@@ -69,9 +69,10 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
             }
         }
     }
-    let is_vulkan_ty = link_type.to_string() == "LinkType :: Vulkan";
+    let is_checked = link_type.to_string() == "LinkType :: Vulkan" 
+        && !cfg!(feature = "no_lifetimes");
     let call_dyn_func = 
-        if is_vulkan_ty && fn_name.to_string() == "vkCreateInstance" {
+        if is_checked && fn_name.to_string() == "vkCreateInstance" {
         let inst_param = &param_list[2];
         quote! {
             let result = DYN_FUNC(#(#param_list),*);
@@ -85,7 +86,7 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
             }
             result
         }
-    } else if is_vulkan_ty && fn_name.to_string() == "vkDestroyInstance" {
+    } else if is_checked && fn_name.to_string() == "vkDestroyInstance" {
         let inst_param = &param_list[0];
         quote! {
             let result = DYN_FUNC(#(#param_list),*);
