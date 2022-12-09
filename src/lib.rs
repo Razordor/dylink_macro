@@ -79,9 +79,7 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
             unsafe {
                 // transmutes to be the same type as vkCreateInstance's 3rd param.
                 dylink::Global.insert_instance(
-                    std::mem::transmute::<_, *mut dylink::VkInstance>(#inst_param)
-                        .as_ref()
-                        .unwrap()
+                    *std::mem::transmute::<_, *mut dylink::VkInstance>(#inst_param)
                 );
             }
             result
