@@ -69,10 +69,9 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
             }
         }
     }
-    let is_checked = link_type.to_string() == "LinkType :: Vulkan" 
-        && !cfg!(feature = "no_lifetimes");
-    let call_dyn_func = 
-        if is_checked && fn_name.to_string() == "vkCreateInstance" {
+    let is_checked =
+        link_type.to_string() == "LinkType :: Vulkan" && !cfg!(feature = "no_lifetimes");
+    let call_dyn_func = if is_checked && fn_name.to_string() == "vkCreateInstance" {
         let inst_param = &param_list[2];
         quote! {
             let result = DYN_FUNC(#(#param_list),*);
@@ -98,8 +97,10 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
         quote!(DYN_FUNC(#(#param_list),*))
     };
 
-    // According to "The Rustonomicon" foreign functions are assumed unsafe, 
+    // According to "The Rustonomicon" foreign functions are assumed unsafe,
     // so functions are implicitly prepended with `unsafe`
+    //
+    // All declarations are wrapped in a function to support macro hygiene.
     quote! {
         #(#fn_attrs)*
         #[allow(non_snake_case)]
@@ -113,7 +114,7 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
             }
             static DYN_FUNC
             : dylink::lazyfn::LazyFn<#abi fn (#params_default) #output>
-            = dylink::lazyfn::LazyFn::new(stringify!(#fn_name), initial_fn, dylink::lazyfn::#link_type);
+            = dylink::lazyfn::LazyFn::new(concat!(stringify!(#fn_name), '\0').as_bytes(), initial_fn, dylink::lazyfn::#link_type);
 
             #call_dyn_func
         }
@@ -146,7 +147,7 @@ fn get_link_type(args: syn::Expr) -> Result<TokenStream2, syn::Error> {
             }
             if let Expr::Lit(ExprLit { lit, .. }) = *assign.right {
                 if let Lit::Str(lib) = lit {
-                    Ok(format!("LinkType::Normal(\"{}\")", lib.value())
+                    Ok(format!("LinkType::Normal(b\"{}\0\")", lib.value())
                         .parse()
                         .unwrap())
                 } else {
