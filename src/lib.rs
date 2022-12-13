@@ -10,19 +10,23 @@ use proc_macro2::TokenStream as TokenStream2;
 use syn::{parse_macro_input, spanned::Spanned};
 
 mod diagnostic;
+mod link_ty;
+use link_ty::LinkType;
+
+
 
 #[proc_macro_attribute]
 pub fn dylink(args: TokenStream1, input: TokenStream1) -> TokenStream1 {
     let args = TokenStream2::from(args);
     let foreign_mod = parse_macro_input!(input as syn::ItemForeignMod);
 
-    #[cfg(feature = "diagnostic")]
+    #[cfg(feature = "warnings")]
     diagnostic::foreign_mod_diag(&foreign_mod);
 
-    let link_type = match get_link_type(syn::parse2(args).unwrap()) {
+    let link_type = match LinkType::try_from(syn::parse2::<syn::Expr>(args).unwrap()) {
         Ok(tk) => tk,
         Err(e) => {
-            return e.into_compile_error().into();
+            return syn::Error::into_compile_error(e).into();
         }
     };
     let mut ret = TokenStream2::new();
@@ -36,7 +40,7 @@ pub fn dylink(args: TokenStream1, input: TokenStream1) -> TokenStream1 {
     TokenStream1::from(ret)
 }
 
-fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream2) -> TokenStream2 {
+fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &LinkType) -> TokenStream2 {
     let fn_name = fn_item.sig.ident.into_token_stream();
     let abi = abi.into_token_stream();
     let vis = fn_item.vis.into_token_stream();
@@ -69,8 +73,7 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
             }
         }
     }
-    let is_checked =
-        link_type.to_string() == "LinkType :: Vulkan" && !cfg!(feature = "no_lifetimes");
+    let is_checked = *link_type == LinkType::Vulkan && !cfg!(feature = "no_lifetimes");
     let call_dyn_func = if is_checked && fn_name.to_string() == "vkCreateInstance" {
         let inst_param = &param_list[2];
         quote! {
@@ -121,42 +124,4 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &TokenStream
     }
 }
 
-fn get_link_type(args: syn::Expr) -> Result<TokenStream2, syn::Error> {
-    use std::str::FromStr;
-    use syn::*;
-    match args {
-        Expr::Path(ExprPath { path, .. }) => {
-            if path.is_ident("vulkan") {
-                Ok(TokenStream2::from_str("LinkType::Vulkan").unwrap())
-            } else if path.is_ident("opengl") {
-                Ok(TokenStream2::from_str("LinkType::OpenGL").unwrap())
-            } else {
-                Err(Error::new(
-                    path.span(),
-                    "expected `vulkan`, `opengl`, or `name`",
-                ))
-            }
-        }
-        Expr::Assign(assign) => {
-            if let Expr::Path(ExprPath { path, .. }) = *assign.left {
-                if !path.is_ident("name") {
-                    return Err(Error::new(path.span(), "expected `name`"));
-                }
-            } else {
-                panic!()
-            }
-            if let Expr::Lit(ExprLit { lit, .. }) = *assign.right {
-                if let Lit::Str(lib) = lit {
-                    Ok(format!("LinkType::Normal(b\"{}\0\")", lib.value())
-                        .parse()
-                        .unwrap())
-                } else {
-                    Err(Error::new(lit.span(), "expected `name`"))
-                }
-            } else {
-                panic!()
-            }
-        }
-        _ => panic!(),
-    }
-}
+

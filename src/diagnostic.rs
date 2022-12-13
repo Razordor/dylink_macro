@@ -1,5 +1,5 @@
 // This emits warnings for attributes where applicable
-#[cfg(feature = "diagnostic")]
+#[cfg(feature = "warnings")]
 pub(crate) fn foreign_mod_diag(foreign_mod: &syn::ItemForeignMod) {
     use syn::spanned::Spanned;
     let mut doc_spans = Vec::new();
