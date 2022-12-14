@@ -15,11 +15,16 @@ impl quote::ToTokens for LinkType {
     fn to_tokens(&self, tokens: &mut TokenStream2) {
         unsafe {
             match self {
-                LinkType::Vulkan => tokens.extend(TokenStream2::from_str("LinkType::Vulkan").unwrap_unchecked()),
-                LinkType::OpenGL => tokens.extend(TokenStream2::from_str("LinkType::OpenGL").unwrap_unchecked()),
-                LinkType::Normal(lib) => {
-                    tokens.extend(TokenStream2::from_str(&format!("LinkType::Normal(b\"{lib}\\0\")")).unwrap_unchecked())
+                LinkType::Vulkan => {
+                    tokens.extend(TokenStream2::from_str("LinkType::Vulkan").unwrap_unchecked())
                 }
+                LinkType::OpenGL => {
+                    tokens.extend(TokenStream2::from_str("LinkType::OpenGL").unwrap_unchecked())
+                }
+                LinkType::Normal(lib) => tokens.extend(
+                    TokenStream2::from_str(&format!("LinkType::Normal(b\"{lib}\\0\")"))
+                        .unwrap_unchecked(),
+                ),
             }
         }
     }

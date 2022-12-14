@@ -13,8 +13,6 @@ mod diagnostic;
 mod link_ty;
 use link_ty::LinkType;
 
-
-
 #[proc_macro_attribute]
 pub fn dylink(args: TokenStream1, input: TokenStream1) -> TokenStream1 {
     let args = TokenStream2::from(args);
@@ -79,7 +77,6 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &LinkType) -
         quote! {
             let result = DYN_FUNC(#(#param_list),*);
             unsafe {
-                // transmutes to be the same type as vkCreateInstance's 3rd param.
                 dylink::Global.insert_instance(
                     *std::mem::transmute::<_, *mut dylink::VkInstance>(#inst_param)
                 );
@@ -91,8 +88,25 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &LinkType) -
         quote! {
             let result = DYN_FUNC(#(#param_list),*);
             unsafe {
-                // transmutes to be the same type as vkDestroyInstance's 1st param.
                 dylink::Global.remove_instance(&std::mem::transmute::<_, dylink::VkInstance>(#inst_param));
+            }
+            result
+        }
+    } else if is_checked && fn_name.to_string() == "vkCreateDevice" {
+        let inst_param = &param_list[3];
+        quote! {
+            let result = DYN_FUNC(#(#param_list),*);
+            unsafe {
+                dylink::Global.insert_device(*std::mem::transmute::<_, *mut dylink::VkDevice>(#inst_param));
+            }
+            result
+        }
+    } else if is_checked && fn_name.to_string() == "vkDestroyDevice" {
+        let inst_param = &param_list[0];
+        quote! {
+            let result = DYN_FUNC(#(#param_list),*);
+            unsafe {
+                dylink::Global.remove_device(&std::mem::transmute::<_, dylink::VkDevice>(#inst_param));
             }
             result
         }
@@ -123,5 +137,3 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &LinkType) -
         }
     }
 }
-
-
