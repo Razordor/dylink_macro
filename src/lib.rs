@@ -1,7 +1,7 @@
 // Copyright (c) 2022 Jonathan "Razordor" Alan Thomason
-#![feature(proc_macro_quote)]
-#![feature(proc_macro_diagnostic)]
-#![feature(proc_macro_span)]
+//#![feature(proc_macro_quote)]
+//#![feature(proc_macro_diagnostic)]
+//#![feature(proc_macro_span)]
 
 use quote::*;
 
