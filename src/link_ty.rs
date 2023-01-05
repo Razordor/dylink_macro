@@ -8,7 +8,16 @@ pub enum LinkType {
     Vulkan,
     OpenGL,
     // note: dylink_macro must use an owned string instead of `&'static [u8]` since it's reading from the source code.
-    Normal(String),
+    Normal(Vec<String>),
+}
+
+impl LinkType {
+    pub(crate) fn lib_count(&self) -> usize {
+        match self {
+            LinkType::Normal(list) => list.len(),
+            _ => 1,
+        }
+    }
 }
 
 impl quote::ToTokens for LinkType {
@@ -21,10 +30,17 @@ impl quote::ToTokens for LinkType {
                 LinkType::OpenGL => {
                     tokens.extend(TokenStream2::from_str("LinkType::OpenGL").unwrap_unchecked())
                 }
-                LinkType::Normal(lib) => tokens.extend(
-                    TokenStream2::from_str(&format!("LinkType::Normal(b\"{lib}\\0\")"))
-                        .unwrap_unchecked(),
-                ),
+                LinkType::Normal(lib_list) => {
+                    let mut lib_array = String::from('[');
+                    for name in lib_list {
+                        lib_array.push_str(&format!("b\"{name}\\0\","))
+                    }
+                    lib_array.push(']');
+                    tokens.extend(
+                        TokenStream2::from_str(&format!("LinkType::Normal({lib_array})"))
+                            .unwrap_unchecked(),
+                    )
+                },
             }
         }
     }
@@ -48,21 +64,55 @@ impl TryFrom<syn::Expr> for LinkType {
             }
             // TODO: replace panic branches with `Error` returns
             Expr::Assign(assign) => {
-                if let Expr::Path(ExprPath { path, .. }) = *assign.left {
+                if let Expr::Path(ExprPath { path, .. }) = assign.left.as_ref() {
                     if !path.is_ident("name") {
                         return Err(Error::new(path.span(), "expected `name`"));
                     }
                 } else {
                     panic!()
                 }
-                if let Expr::Lit(ExprLit { lit, .. }) = *assign.right {
+                if let Expr::Lit(ExprLit { lit, .. }) = assign.right.as_ref() {
                     if let Lit::Str(lib) = lit {
-                        Ok(LinkType::Normal(lib.value()))
+                        Ok(LinkType::Normal(vec![lib.value()]))
                     } else {
                         Err(Error::new(lit.span(), "expected `name`"))
                     }
                 } else {
                     panic!()
+                }
+            }
+            Expr::Call(call) => {
+                // TODO: convert to syn::Error if false
+                assert!(matches!(*call.func, Expr::Path(ExprPath { path, .. }) if path.is_ident("any")));
+
+                let mut lib_list = Vec::new();
+                for item in call.args.iter() {
+                    match item {
+                        Expr::Assign(assign) => {
+                            if let Expr::Path(ExprPath { path, .. }) = assign.left.as_ref() {
+                                if !path.is_ident("name") {
+                                    return Err(Error::new(path.span(), "expected `name`"));
+                                }
+                            } else {
+                                panic!()
+                            }
+                            if let Expr::Lit(ExprLit { lit, .. }) = assign.right.as_ref() {
+                                if let Lit::Str(lib) = lit {
+                                    lib_list.push(lib.value());                                    
+                                } else {
+                                    return Err(Error::new(lit.span(), "expected `name`"))
+                                }
+                            } else {
+                                panic!()
+                            }
+                        }
+                        _ => panic!("expected `name = <string>`")
+                    }
+                }
+                if lib_list.is_empty() {
+                    panic!("no arguments detected")
+                } else {
+                    Ok(LinkType::Normal(lib_list))
                 }
             }
             _ => panic!(),
