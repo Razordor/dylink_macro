@@ -132,8 +132,8 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &LinkType) -
                 }
             }
             static DYN_FUNC
-            : dylink::lazyfn::LazyFn<#abi fn (#params_default) #output, #lib_count>
-            = dylink::lazyfn::LazyFn::new(concat!(stringify!(#fn_name), '\0'), initial_fn, dylink::lazyfn::#link_type);
+            : dylink::LazyFn<#abi fn (#params_default) #output, #lib_count>
+            = dylink::LazyFn::new(concat!(stringify!(#fn_name), '\0'), initial_fn, dylink::#link_type);
 
             #call_dyn_func
         }
