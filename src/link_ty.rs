@@ -33,7 +33,7 @@ impl quote::ToTokens for LinkType {
                 LinkType::Normal(lib_list) => {
                     let mut lib_array = String::from('[');
                     for name in lib_list {
-                        lib_array.push_str(&format!("b\"{name}\\0\","))
+                        lib_array.push_str(&format!("\"{name}\\0\","))
                     }
                     lib_array.push(']');
                     tokens.extend(
