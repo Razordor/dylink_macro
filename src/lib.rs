@@ -114,8 +114,6 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &LinkType) -
         quote!(DYN_FUNC(#(#param_list),*))
     };
 
-    let lib_count = link_type.lib_count();
-
     // According to "The Rustonomicon" foreign functions are assumed unsafe,
     // so functions are implicitly prepended with `unsafe`
     //
@@ -128,17 +126,14 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &LinkType) -
             #abi fn initial_fn (#(#param_ty_list),*) #output {
                 use std::ffi::CStr;
                 const FN_NAME: &'static CStr = unsafe {CStr::from_bytes_with_nul_unchecked(concat!(stringify!(#fn_name), '\0').as_bytes())};
-                match DYN_FUNC.load(FN_NAME) {
+                match DYN_FUNC.load(FN_NAME, dylink::#link_type) {
                     Ok(function) => {function(#(#param_list),*)},
                     Err(err) => panic!("{}", err),
                 }
             }
             static DYN_FUNC
-            : dylink::LazyFn<#abi fn (#params_default) #output, #lib_count>
-            = dylink::LazyFn::new(                
-                initial_fn, 
-                dylink::#link_type
-            );
+            : dylink::LazyFn<#abi fn (#params_default) #output>
+            = dylink::LazyFn::new(initial_fn);
 
             #call_dyn_func
         }

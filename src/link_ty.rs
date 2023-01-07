@@ -11,15 +11,6 @@ pub enum LinkType {
     Normal(Vec<String>),
 }
 
-impl LinkType {
-    pub(crate) fn lib_count(&self) -> usize {
-        match self {
-            LinkType::Normal(list) => list.len(),
-            _ => 1,
-        }
-    }
-}
-
 impl quote::ToTokens for LinkType {
     fn to_tokens(&self, tokens: &mut TokenStream2) {
         unsafe {
@@ -31,7 +22,7 @@ impl quote::ToTokens for LinkType {
                     tokens.extend(TokenStream2::from_str("LinkType::OpenGL").unwrap_unchecked())
                 }
                 LinkType::Normal(lib_list) => {
-                    let mut lib_array = String::from('[');
+                    let mut lib_array = String::from("&[");
                     for name in lib_list {
                         lib_array.push_str(&format!("\"{name}\\0\","))
                     }
