@@ -6,7 +6,6 @@ use syn::*;
 #[derive(PartialEq)]
 pub enum LinkType {
     Vulkan,
-    OpenGL,
     // note: dylink_macro must use an owned string instead of `&'static [u8]` since it's reading from the source code.
     Normal(Vec<String>),
 }
@@ -17,9 +16,6 @@ impl quote::ToTokens for LinkType {
             match self {
                 LinkType::Vulkan => {
                     tokens.extend(TokenStream2::from_str("LinkType::Vulkan").unwrap_unchecked())
-                }
-                LinkType::OpenGL => {
-                    tokens.extend(TokenStream2::from_str("LinkType::OpenGL").unwrap_unchecked())
                 }
                 LinkType::Normal(lib_list) => {
                     let mut lib_array = String::from("&[");
@@ -44,12 +40,10 @@ impl TryFrom<syn::Expr> for LinkType {
             Expr::Path(ExprPath { path, .. }) => {
                 if path.is_ident("vulkan") {
                     Ok(LinkType::Vulkan)
-                } else if path.is_ident("opengl") {
-                    Ok(LinkType::OpenGL)
                 } else {
                     Err(Error::new(
                         path.span(),
-                        "expected `vulkan`, `opengl`, or `name`",
+                        "expected `vulkan`, or `name`",
                     ))
                 }
             }
