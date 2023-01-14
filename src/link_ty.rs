@@ -27,7 +27,7 @@ impl quote::ToTokens for LinkType {
                         TokenStream2::from_str(&format!("LinkType::Normal({lib_array})"))
                             .unwrap_unchecked(),
                     )
-                },
+                }
             }
         }
     }
@@ -37,38 +37,31 @@ impl TryFrom<syn::Expr> for LinkType {
     type Error = syn::Error;
     fn try_from(value: syn::Expr) -> std::result::Result<Self, Self::Error> {
         match value {
+            // Branch for syntax: #[dylink(vulkan)]
             Expr::Path(ExprPath { path, .. }) => {
                 if path.is_ident("vulkan") {
                     Ok(LinkType::Vulkan)
                 } else {
-                    Err(Error::new(
-                        path.span(),
-                        "expected `vulkan`, or `name`",
-                    ))
+                    Err(Error::new(path.span(), "expected `vulkan`, or `name`"))
                 }
             }
             // TODO: replace panic branches with `Error` returns
+            // Branch for syntax: #[dylink(name = "")]
             Expr::Assign(assign) => {
-                if let Expr::Path(ExprPath { path, .. }) = assign.left.as_ref() {
-                    if !path.is_ident("name") {
-                        return Err(Error::new(path.span(), "expected `name`"));
-                    }
-                } else {
-                    panic!()
+                if !matches!(assign.left.as_ref(), Expr::Path(ExprPath { path, .. }) if path.is_ident("name")) {
+                    return Err(Error::new(assign.left.span(), "expected identifier `name`"))
                 }
-                if let Expr::Lit(ExprLit { lit, .. }) = assign.right.as_ref() {
-                    if let Lit::Str(lib) = lit {
-                        Ok(LinkType::Normal(vec![lib.value()]))
-                    } else {
-                        Err(Error::new(lit.span(), "expected `name`"))
-                    }
-                } else {
-                    panic!()
+                match assign.right.as_ref() {
+                    Expr::Lit(ExprLit { lit: Lit::Str(lib), .. }) => Ok(LinkType::Normal(vec![lib.value()])),
+                    right => return Err(Error::new(right.span(), "expected string literal")),
                 }
             }
+            // Branch for syntax: #[dylink(any())]
             Expr::Call(call) => {
                 // TODO: convert to syn::Error if false
-                assert!(matches!(*call.func, Expr::Path(ExprPath { path, .. }) if path.is_ident("any")));
+                assert!(
+                    matches!(*call.func, Expr::Path(ExprPath { path, .. }) if path.is_ident("any"))
+                );
 
                 let mut lib_list = Vec::new();
                 for item in call.args.iter() {
@@ -83,15 +76,15 @@ impl TryFrom<syn::Expr> for LinkType {
                             }
                             if let Expr::Lit(ExprLit { lit, .. }) = assign.right.as_ref() {
                                 if let Lit::Str(lib) = lit {
-                                    lib_list.push(lib.value());                                    
+                                    lib_list.push(lib.value());
                                 } else {
-                                    return Err(Error::new(lit.span(), "expected `name`"))
+                                    return Err(Error::new(lit.span(), "expected `name`"));
                                 }
                             } else {
                                 panic!()
                             }
                         }
-                        _ => panic!("expected `name = <string>`")
+                        _ => panic!("expected `name = <string>`"),
                     }
                 }
                 if lib_list.is_empty() {

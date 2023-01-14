@@ -122,7 +122,7 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &LinkType) -
         #(#fn_attrs)*
         #[allow(non_snake_case)]
         #[inline]
-        #vis unsafe #abi fn #fn_name (#(#param_ty_list),*) #output {            
+        #vis unsafe #abi fn #fn_name (#(#param_ty_list),*) #output {
             #abi fn initial_fn (#(#param_ty_list),*) #output {
                 use std::ffi::CStr;
                 const FN_NAME: &'static CStr = unsafe {CStr::from_bytes_with_nul_unchecked(concat!(stringify!(#fn_name), '\0').as_bytes())};
