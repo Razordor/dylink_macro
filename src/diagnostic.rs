@@ -31,7 +31,3 @@ pub(crate) fn foreign_mod_diag(foreign_mod: &syn::ItemForeignMod) {
         .emit();
     }
 }
-
-/*pub(crate) fn expect_token(tk: proc_macro2::TokenTree) {
-
-}*/

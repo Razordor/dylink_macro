@@ -42,58 +42,68 @@ impl TryFrom<syn::Expr> for LinkType {
                 if path.is_ident("vulkan") {
                     Ok(LinkType::Vulkan)
                 } else {
-                    Err(Error::new(path.span(), "expected `vulkan`, or `name`"))
+                    Err(Error::new(
+                        path.span(),
+                        "expected `vulkan`, `any`, or `name`",
+                    ))
                 }
             }
-            // TODO: replace panic branches with `Error` returns
             // Branch for syntax: #[dylink(name = "")]
             Expr::Assign(assign) => {
-                if !matches!(assign.left.as_ref(), Expr::Path(ExprPath { path, .. }) if path.is_ident("name")) {
-                    return Err(Error::new(assign.left.span(), "expected identifier `name`"))
+                if !matches!(assign.left.as_ref(), Expr::Path(ExprPath { path, .. }) if path.is_ident("name"))
+                {
+                    return Err(Error::new(assign.left.span(), "expected identifier `name`"));
                 }
                 match assign.right.as_ref() {
-                    Expr::Lit(ExprLit { lit: Lit::Str(lib), .. }) => Ok(LinkType::Normal(vec![lib.value()])),
-                    right => return Err(Error::new(right.span(), "expected string literal")),
+                    Expr::Lit(ExprLit {
+                        lit: Lit::Str(lib), ..
+                    }) => Ok(LinkType::Normal(vec![lib.value()])),
+                    right => Err(Error::new(right.span(), "expected string literal")),
                 }
             }
             // Branch for syntax: #[dylink(any())]
             Expr::Call(call) => {
-                // TODO: convert to syn::Error if false
-                assert!(
-                    matches!(*call.func, Expr::Path(ExprPath { path, .. }) if path.is_ident("any"))
-                );
-
+                if !matches!(call.func.as_ref(), Expr::Path(ExprPath { path, .. }) if path.is_ident("any"))
+                {
+                    return Err(Error::new(call.func.span(), "expected function `any`"));
+                }
                 let mut lib_list = Vec::new();
-                for item in call.args.iter() {
-                    match item {
+                // This is non-recursive by design.
+                // The `any` function should only be used once and vulkan style loading is no longer an option by this point.
+                for arg in call.args.iter() {
+                    match arg {
                         Expr::Assign(assign) => {
-                            if let Expr::Path(ExprPath { path, .. }) = assign.left.as_ref() {
-                                if !path.is_ident("name") {
-                                    return Err(Error::new(path.span(), "expected `name`"));
-                                }
-                            } else {
-                                panic!()
+                            if !matches!(assign.left.as_ref(), Expr::Path(ExprPath { path, .. }) if path.is_ident("name"))
+                            {
+                                return Err(Error::new(
+                                    assign.left.span(),
+                                    "expected identifier `name`",
+                                ));
                             }
-                            if let Expr::Lit(ExprLit { lit, .. }) = assign.right.as_ref() {
-                                if let Lit::Str(lib) = lit {
-                                    lib_list.push(lib.value());
-                                } else {
-                                    return Err(Error::new(lit.span(), "expected `name`"));
+                            match assign.right.as_ref() {
+                                Expr::Lit(ExprLit {
+                                    lit: Lit::Str(lib), ..
+                                }) => lib_list.push(lib.value()),
+                                right => {
+                                    return Err(Error::new(right.span(), "expected string literal"))
                                 }
-                            } else {
-                                panic!()
                             }
                         }
-                        _ => panic!("expected `name = <string>`"),
+                        other => {
+                            return Err(Error::new(other.span(), "expected `name = <string>`"))
+                        }
                     }
                 }
                 if lib_list.is_empty() {
-                    panic!("no arguments detected")
+                    return Err(Error::new(call.span(), "no arguments detected"));
                 } else {
                     Ok(LinkType::Normal(lib_list))
                 }
             }
-            _ => panic!(),
+            expr => Err(Error::new(
+                expr.span(),
+                "expected `vulkan`, `any`, or `name`",
+            )),
         }
     }
 }

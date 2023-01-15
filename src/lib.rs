@@ -21,7 +21,16 @@ pub fn dylink(args: TokenStream1, input: TokenStream1) -> TokenStream1 {
     #[cfg(feature = "warnings")]
     diagnostic::foreign_mod_diag(&foreign_mod);
 
-    let link_type = match LinkType::try_from(syn::parse2::<syn::Expr>(args).unwrap()) {
+    let args_span = args.span();
+    let expr = match syn::parse2::<syn::Expr>(args) {
+        Ok(expr) => expr,
+        _ => {
+            return syn::Error::new(args_span, "expected expression")
+                .into_compile_error()
+                .into()
+        }
+    };
+    let link_type = match LinkType::try_from(expr) {
         Ok(tk) => tk,
         Err(e) => {
             return syn::Error::into_compile_error(e).into();
@@ -32,7 +41,10 @@ pub fn dylink(args: TokenStream1, input: TokenStream1) -> TokenStream1 {
         use syn::ForeignItem;
         match item {
             ForeignItem::Fn(fn_item) => ret.extend(parse_fn(&foreign_mod.abi, fn_item, &link_type)),
-            _ => panic!(),
+            other => {
+                let abi = &foreign_mod.abi;
+                ret.extend(quote!(#abi {#other}))
+            }
         }
     }
     TokenStream1::from(ret)
