@@ -1,3 +1,4 @@
+// Copyright (c) 2022 Jonathan "Razordor" Alan Thomason
 use proc_macro2::TokenStream as TokenStream2;
 use std::str::FromStr;
 use syn::spanned::Spanned;
@@ -100,6 +101,7 @@ impl TryFrom<syn::Expr> for LinkType {
                     Ok(LinkType::Normal(lib_list))
                 }
             }
+            // Branch for everything else.
             expr => Err(Error::new(
                 expr.span(),
                 "expected `vulkan`, `any`, or `name`",

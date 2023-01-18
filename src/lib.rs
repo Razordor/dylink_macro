@@ -39,12 +39,10 @@ pub fn dylink(args: TokenStream1, input: TokenStream1) -> TokenStream1 {
     let mut ret = TokenStream2::new();
     for item in foreign_mod.items {
         use syn::ForeignItem;
+        let abi = &foreign_mod.abi;
         match item {
-            ForeignItem::Fn(fn_item) => ret.extend(parse_fn(&foreign_mod.abi, fn_item, &link_type)),
-            other => {
-                let abi = &foreign_mod.abi;
-                ret.extend(quote!(#abi {#other}))
-            }
+            ForeignItem::Fn(fn_item) => ret.extend(parse_fn(abi, fn_item, &link_type)),
+            other => ret.extend(quote!(#abi {#other})),
         }
     }
     TokenStream1::from(ret)

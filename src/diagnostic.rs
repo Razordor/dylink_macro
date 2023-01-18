@@ -1,3 +1,5 @@
+// Copyright (c) 2022 Jonathan "Razordor" Alan Thomason
+
 // This emits warnings for attributes where applicable
 #[cfg(feature = "warnings")]
 pub(crate) fn foreign_mod_diag(foreign_mod: &syn::ItemForeignMod) {
