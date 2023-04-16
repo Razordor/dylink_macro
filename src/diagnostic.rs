@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Jonathan "Razordor" Alan Thomason
+// Copyright (c) 2023 Jonathan "Razordor" Alan Thomason
 
 // This emits warnings for attributes where applicable
 #[cfg(feature = "warnings")]

@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Jonathan "Razordor" Alan Thomason
+// Copyright (c) 2023 Jonathan "Razordor" Alan Thomason
 use proc_macro2::TokenStream as TokenStream2;
 use std::str::FromStr;
 use syn::spanned::Spanned;
