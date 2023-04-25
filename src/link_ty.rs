@@ -25,7 +25,7 @@ impl quote::ToTokens for LinkType {
                     }
                     lib_array.push(']');
                     tokens.extend(
-                        TokenStream2::from_str(&format!("LinkType::Normal({lib_array})"))
+                        TokenStream2::from_str(&format!("LinkType::System({lib_array})"))
                             .unwrap_unchecked(),
                     )
                 }
