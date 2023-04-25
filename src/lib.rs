@@ -137,10 +137,11 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &LinkType) -
                     Err(err) => panic!("{}", err),
                 }
             }
+            static DYN_FUNC_REF: &'static #abi fn (#params_default) #output = &(initial_fn as #abi fn (#params_default) #output);
             static DYN_FUNC
             : dylink::LazyFn<#abi fn (#params_default) #output>
             = dylink::LazyFn::new(
-                std::sync::atomic::AtomicPtr::new(unsafe {std::mem::transmute(&(initial_fn as #abi fn (#params_default) #output))})
+                std::sync::atomic::AtomicPtr::new(unsafe {std::mem::transmute(DYN_FUNC_REF)})
             );
 
             #call_dyn_func
