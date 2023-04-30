@@ -8,7 +8,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-dylink_macro = "0.3.0"
+dylink_macro = "0.4"
 ```
 
 ## License
