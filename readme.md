@@ -1,5 +1,7 @@
 # Dylink Attribute macro
 
+## Overview
+
 A procedural macro for generating dylink functions. Please see [dylink](https://crates.io/crates/dylink) for more information on how to use this crate.
 
 ## Usage
@@ -8,7 +10,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-dylink_macro = "0.3.0"
+dylink_macro = "0.4"
 ```
 
 ## License

@@ -8,7 +8,7 @@ use syn::*;
 pub enum LinkType {
     Vulkan,
     // note: dylink_macro must use an owned string instead of `&'static [u8]` since it's reading from the source code.
-    Normal(Vec<String>),
+    System(Vec<String>),
 }
 
 impl quote::ToTokens for LinkType {
@@ -18,10 +18,10 @@ impl quote::ToTokens for LinkType {
                 LinkType::Vulkan => {
                     tokens.extend(TokenStream2::from_str("LinkType::Vulkan").unwrap_unchecked())
                 }
-                LinkType::Normal(lib_list) => {
+                LinkType::System(lib_list) => {
                     let mut lib_array = String::from("&[");
                     for name in lib_list {
-                        lib_array.push_str(&format!("\"{name}\\0\","))
+                        lib_array.push_str(&format!("\"{name}\","))
                     }
                     lib_array.push(']');
                     tokens.extend(
@@ -58,7 +58,7 @@ impl TryFrom<syn::Expr> for LinkType {
                 match assign.right.as_ref() {
                     Expr::Lit(ExprLit {
                         lit: Lit::Str(lib), ..
-                    }) => Ok(LinkType::Normal(vec![lib.value()])),
+                    }) => Ok(LinkType::System(vec![lib.value()])),
                     right => Err(Error::new(right.span(), "expected string literal")),
                 }
             }
@@ -98,7 +98,7 @@ impl TryFrom<syn::Expr> for LinkType {
                 if lib_list.is_empty() {
                     return Err(Error::new(call.span(), "no arguments detected"));
                 } else {
-                    Ok(LinkType::Normal(lib_list))
+                    Ok(LinkType::System(lib_list))
                 }
             }
             // Branch for everything else.
