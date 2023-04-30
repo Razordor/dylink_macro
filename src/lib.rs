@@ -129,6 +129,8 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &LinkType) -
         #[allow(non_snake_case)]
         #[inline]
         #vis unsafe #abi fn #fn_name (#(#param_ty_list),*) #output {
+            // InstFnPtr: instance function pointer type
+            type InstFnPtr = #abi fn (#params_default) #output;
             #abi fn initial_fn (#(#param_ty_list),*) #output {
                 use std::ffi::CStr;
                 const FN_NAME: &'static CStr = unsafe {CStr::from_bytes_with_nul_unchecked(concat!(stringify!(#fn_name), '\0').as_bytes())};
@@ -137,11 +139,11 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &LinkType) -
                     Err(err) => panic!("{}", err),
                 }
             }
-            static DYN_FUNC_REF: &'static #abi fn (#params_default) #output = &(initial_fn as #abi fn (#params_default) #output);
+            const DYN_FUNC_REF: &'static InstFnPtr = &(initial_fn as InstFnPtr);
             static DYN_FUNC
-            : dylink::LazyFn<#abi fn (#params_default) #output>
+            : dylink::LazyFn<InstFnPtr>
             = dylink::LazyFn::new(
-                std::sync::atomic::AtomicPtr::new(unsafe {std::mem::transmute(DYN_FUNC_REF)})
+                std::sync::atomic::AtomicPtr::new(DYN_FUNC_REF as *const InstFnPtr as *mut InstFnPtr)
             );
 
             #call_dyn_func
