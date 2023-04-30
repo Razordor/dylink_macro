@@ -133,8 +133,7 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &LinkType) -
             type InstFnPtr = #abi fn (#params_default) #output;
             #abi fn initial_fn (#(#param_ty_list),*) #output {
                 use std::ffi::CStr;
-                const FN_NAME: &'static CStr = unsafe {CStr::from_bytes_with_nul_unchecked(concat!(stringify!(#fn_name), '\0').as_bytes())};
-                match DYN_FUNC.load(FN_NAME, dylink::#link_type) {
+                match DYN_FUNC.load(stringify!(#fn_name), dylink::#link_type) {
                     Ok(function) => {function(#(#param_list),*)},
                     Err(err) => panic!("{}", err),
                 }
