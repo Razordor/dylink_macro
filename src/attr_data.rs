@@ -87,7 +87,8 @@ impl TryFrom<Punctuated<Expr, Token!(,)>> for AttrData {
                 // Branch for syntax: #[dylink(any())]
                 Expr::Call(call) => {
                     let call_fn = call.func.as_ref();
-                    if !matches!(call_fn, Expr::Path(ExprPath { path, .. }) if path.is_ident("any")) {
+                    if !matches!(call_fn, Expr::Path(ExprPath { path, .. }) if path.is_ident("any"))
+                    {
                         errors.push(Error::new(call_fn.span(), "Expected function `any`."));
                     } else {
                         let mut lib_list = vec![];
@@ -107,13 +108,14 @@ impl TryFrom<Punctuated<Expr, Token!(,)>> for AttrData {
                                         Expr::Lit(ExprLit {
                                             lit: Lit::Str(lib), ..
                                         }) => lib_list.push(lib.value()),
-                                        right => errors
-                                            .push(Error::new(right.span(), "Expected string literal.")),
+                                        right => errors.push(Error::new(
+                                            right.span(),
+                                            "Expected string literal.",
+                                        )),
                                     }
                                 }
-                                other => {
-                                    errors.push(Error::new(other.span(), "Expected `name = <string>`."))
-                                }
+                                other => errors
+                                    .push(Error::new(other.span(), "Expected `name = <string>`.")),
                             }
                         }
                         if lib_list.is_empty() {

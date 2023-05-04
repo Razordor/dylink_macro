@@ -2,11 +2,13 @@
 use quote::*;
 
 use proc_macro::TokenStream as TokenStream1;
-use proc_macro2::{TokenStream as TokenStream2};
-use syn::{parse_macro_input, spanned::Spanned, punctuated::Punctuated, Expr, Token, parse::Parser};
+use proc_macro2::TokenStream as TokenStream2;
+use syn::{
+    parse::Parser, parse_macro_input, punctuated::Punctuated, spanned::Spanned, Expr, Token,
+};
 
-mod diagnostic;
 mod attr_data;
+mod diagnostic;
 use attr_data::*;
 
 #[proc_macro_attribute]
@@ -16,9 +18,12 @@ pub fn dylink(args: TokenStream1, input: TokenStream1) -> TokenStream1 {
 
     #[cfg(feature = "warnings")]
     diagnostic::foreign_mod_diag(&foreign_mod);
-    
-    let punct = Parser::parse2(Punctuated::<Expr, Token!(,)>::parse_separated_nonempty, args)
-        .expect("failed to parse");
+
+    let punct = Parser::parse2(
+        Punctuated::<Expr, Token!(,)>::parse_separated_nonempty,
+        args,
+    )
+    .expect("failed to parse");
     //let expr: Punctuated<Expr, Token!(,)> = parser.parse(args)?;
     let (link_type, strip) = match AttrData::try_from(punct) {
         Ok(attr) => (attr.link_ty, attr.strip),
@@ -38,7 +43,12 @@ pub fn dylink(args: TokenStream1, input: TokenStream1) -> TokenStream1 {
     TokenStream1::from(ret)
 }
 
-fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &LinkType, strip: bool) -> TokenStream2 {
+fn parse_fn(
+    abi: &syn::Abi,
+    fn_item: syn::ForeignItemFn,
+    link_type: &LinkType,
+    strip: bool,
+) -> TokenStream2 {
     let fn_name = fn_item.sig.ident.into_token_stream();
     let abi = abi.into_token_stream();
     let vis = fn_item.vis.into_token_stream();
@@ -129,14 +139,15 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &LinkType, s
                     type InstFnPtr = unsafe #abi fn (#params_default) #output;
                     unsafe #abi fn initial_fn (#(#param_ty_list),*) #output {
                         use std::ffi::CStr;
-                        match #fn_name.load(stringify!(#fn_name), dylink::#link_type) {
+                        match #fn_name.load() {
                             Ok(function) => {function(#(#param_list),*)},
                             Err(err) => panic!("{}", err),
                         }
                     }
-                    const DYN_FUNC_REF: &'static InstFnPtr = &(initial_fn as InstFnPtr);    
+                    const DYN_FUNC_REF: &'static InstFnPtr = &(initial_fn as InstFnPtr);
                     DYN_FUNC_REF as *const InstFnPtr as *mut InstFnPtr
-                })}
+                })},
+                stringify!(#fn_name), dylink::#link_type
             );
         }
     } else {
@@ -149,7 +160,7 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &LinkType, s
                 type InstFnPtr = #abi fn (#params_default) #output;
                 #abi fn initial_fn (#(#param_ty_list),*) #output {
                     use std::ffi::CStr;
-                    match DYN_FUNC.load(stringify!(#fn_name), dylink::#link_type) {
+                    match DYN_FUNC.load() {
                         Ok(function) => {function(#(#param_list),*)},
                         Err(err) => panic!("{}", err),
                     }
@@ -158,7 +169,8 @@ fn parse_fn(abi: &syn::Abi, fn_item: syn::ForeignItemFn, link_type: &LinkType, s
                 static DYN_FUNC
                 : dylink::LazyFn<InstFnPtr>
                 = dylink::LazyFn::new(
-                    unsafe {std::ptr::NonNull::new_unchecked(DYN_FUNC_REF as *const InstFnPtr as *mut InstFnPtr)}
+                    unsafe {std::ptr::NonNull::new_unchecked(DYN_FUNC_REF as *const InstFnPtr as *mut InstFnPtr)},
+                    stringify!(#fn_name), dylink::#link_type
                 );
 
                 #call_dyn_func
