@@ -130,7 +130,7 @@ impl TryFrom<Punctuated<Expr, Token!(,)>> for AttrData {
             }
         }
 
-        if let None = maybe_link_ty {
+        if maybe_link_ty.is_none() {
             errors.push(Error::new(
                 value.span(),
                 "No linkage detected. Suggested: use `vulkan` or `name = <string>` for linkage.",
@@ -150,7 +150,7 @@ impl TryFrom<Punctuated<Expr, Token!(,)>> for AttrData {
             }
         } else {
             // strip is defaulted to false
-            if let None = strip {
+            if strip.is_none() {
                 strip = Some(false);
             }
             Ok(Self {
