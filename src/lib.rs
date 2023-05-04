@@ -139,7 +139,7 @@ fn parse_fn(
                     type InstFnPtr = unsafe #abi fn (#params_default) #output;
                     unsafe #abi fn initial_fn (#(#param_ty_list),*) #output {
                         use std::ffi::CStr;
-                        match #fn_name.load() {
+                        match #fn_name.try_link() {
                             Ok(function) => {function(#(#param_list),*)},
                             Err(err) => panic!("{}", err),
                         }
@@ -160,7 +160,7 @@ fn parse_fn(
                 type InstFnPtr = #abi fn (#params_default) #output;
                 #abi fn initial_fn (#(#param_ty_list),*) #output {
                     use std::ffi::CStr;
-                    match DYN_FUNC.load() {
+                    match DYN_FUNC.try_link() {
                         Ok(function) => {function(#(#param_list),*)},
                         Err(err) => panic!("{}", err),
                     }
