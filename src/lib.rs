@@ -132,7 +132,7 @@ fn parse_fn(
         quote! {
             #(#fn_attrs)*
             #[allow(non_upper_case_globals)]
-            static #fn_name
+            #vis static #fn_name
             : dylink::LazyFn<unsafe #abi fn (#params_default) #output>
             = dylink::LazyFn::new(
                 unsafe {std::ptr::NonNull::new_unchecked({
