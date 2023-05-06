@@ -4,7 +4,7 @@ use quote::*;
 use proc_macro::TokenStream as TokenStream1;
 use proc_macro2::TokenStream as TokenStream2;
 use syn::{
-    parse::Parser, parse_macro_input, punctuated::Punctuated, spanned::Spanned, Expr, Token,
+    parse::Parser, punctuated::Punctuated, spanned::Spanned, Expr, Token,
 };
 
 mod attr_data;
@@ -14,7 +14,11 @@ use attr_data::*;
 #[proc_macro_attribute]
 pub fn dylink(args: TokenStream1, input: TokenStream1) -> TokenStream1 {
     let args = TokenStream2::from(args);
-    let foreign_mod = parse_macro_input!(input as syn::ItemForeignMod);
+    let input = TokenStream2::from(input);
+    let foreign_mod = syn::parse2::<syn::ItemForeignMod>(input)
+        .expect("failed to parse");
+    
+    //parse_macro_input!(input as syn::ItemForeignMod);
 
     #[cfg(feature = "warnings")]
     diagnostic::foreign_mod_diag(&foreign_mod);
