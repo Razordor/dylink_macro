@@ -14,9 +14,18 @@ publish = false
 proc-macro = true
 
 [dependencies]
-syn = { version = "2.0", features = ["full", "parsing", "printing" ], default-features=false }
-quote = "1.0"
 proc-macro2 = "1.0"
+
+[dependencies.quote]
+version="1.0"
+default-features=false
+
+
+[dependencies.syn]
+version = "2.0"
+features = ["full", "parsing", "printing" ]
+default-features=false
+
 
 [features]
 warnings = []

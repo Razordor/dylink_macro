@@ -139,7 +139,7 @@ fn parse_fn(
             #vis static #fn_name
             : dylink::LazyFn<unsafe #abi fn (#params_default) #output>
             = dylink::LazyFn::new(
-                unsafe {std::ptr::NonNull::new_unchecked({
+                {
                     type InstFnPtr = unsafe #abi fn (#params_default) #output;
                     unsafe #abi fn initial_fn (#(#param_ty_list),*) #output {
                         use std::ffi::CStr;
@@ -149,8 +149,8 @@ fn parse_fn(
                         }
                     }
                     const DYN_FUNC_REF: &'static InstFnPtr = &(initial_fn as InstFnPtr);
-                    DYN_FUNC_REF as *const InstFnPtr as *mut InstFnPtr
-                })},
+                    DYN_FUNC_REF
+                },
                 stringify!(#fn_name), dylink::#link_type
             );
         }
@@ -173,7 +173,7 @@ fn parse_fn(
                 static DYN_FUNC
                 : dylink::LazyFn<InstFnPtr>
                 = dylink::LazyFn::new(
-                    unsafe {std::ptr::NonNull::new_unchecked(DYN_FUNC_REF as *const InstFnPtr as *mut InstFnPtr)},
+                    DYN_FUNC_REF,
                     stringify!(#fn_name), dylink::#link_type
                 );
 
